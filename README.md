@@ -23,7 +23,7 @@ class Author: ParseObject {
     var id: Int
     
     required init(json: JSON) {
-        id = json["author_id"].intValue
+        id = json["id"].intValue
         birth = json["birth"].int
         firstName = json["first_name"].string
         lastName = json["last_name"].string
@@ -38,7 +38,7 @@ class Document: ParseObject {
     
     required init(json: JSON) {
         title = json["title"].stringValue
-        author = json["author"].string
+        author = json["author_id"].int
         link = json["link"].string
         downloaded = json["downloaded"].int
     }
