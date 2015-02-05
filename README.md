@@ -61,6 +61,7 @@ class Document: ParseObject {
 * With `persistToLocal` phrase, authors will sync to local (your document directory), with defined primary key and max expire age. After then, all queries / subqueries to author, will be using local data if possible.
 * you can use swift infix operators `||` and `&&` on queries.
 * Notice generic support
+* `ParseObject` is a simple protocol. (You can use struct as you like)
 
 ## Requirements
 
