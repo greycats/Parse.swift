@@ -47,7 +47,7 @@ class Document: ParseObject {
         documents.query().whereKey("title", match: term).order("-downloaded").limit(50).get(then)
     }
     
-    class func documentByAuthorName(firstName: String, last_name: String, birth: Int?, then: ([Document], NSError?) -> Void) {
+    class func documentsByAuthorName(firstName: String, last_name: String, birth: Int, then: ([Document], NSError?) -> Void) {
         let firstNameQuery = authors.query().whereKey("first_name", equalTo: firstName)
         let lastNameQuery = authors.query().whereKey("last_name", equalTo: lastName)
         let ageQuery = authors.query().whereKey("birth", greaterThan: birth)
@@ -58,9 +58,9 @@ class Document: ParseObject {
 }
 ```
 
-With `persistToLocal` phrase, authors will sync to local (your document directory), with defined primary key and max expire age. After then, all queries / subqueries to author, will be using local data if possible.
-
-
+* With `persistToLocal` phrase, authors will sync to local (your document directory), with defined primary key and max expire age. After then, all queries / subqueries to author, will be using local data if possible.
+* you can use swift infix operators `||` and `&&` on queries.
+* Notice generic support
 
 ## Requirements
 
