@@ -21,7 +21,7 @@ var parseManager: Manager?
 
 private let local_search_queue = dispatch_queue_create(nil, DISPATCH_QUEUE_CONCURRENT)
 
-func parseRequest(method: Method, path: String, parameters: [String: AnyObject]?, closure: (JSON, NSError?) -> Void) {
+func parseRequest(method: Alamofire.Method, path: String, parameters: [String: AnyObject]?, closure: (JSON, NSError?) -> Void) {
 	var pathString = "https://api.parse.com/1\(path)"
 	var encoding: ParameterEncoding
 	switch method {
@@ -128,7 +128,7 @@ public struct Search {
 	var memcache: [JSON]? = nil
 }
 
-public class RestParse<T: ParseObject> {
+public class Parse<T: ParseObject> {
 	
 	let name: String
 	
@@ -238,14 +238,14 @@ public class Query<T: ParseObject> {
 	var constraints: Constraints
 	var parameters: [String: AnyObject] = [:]
 	var path: String
-	var object: RestParse<T>
+	var object: Parse<T>
 	var order: String?
 	var _limit: Int = 100
 	var _skip: Int = 0
 	
 	var fetchesCount = false
 	
-	init(_ object: RestParse<T>, constraints: [Constraint] = []) {
+	init(_ object: Parse<T>, constraints: [Constraint] = []) {
 		self.constraints = Constraints(className: object.name)
 		self.object = object
 		path = "/classes/\(object.name)"
@@ -423,7 +423,7 @@ public class Operations<T: ParseObject> {
 	var operations: [Operation]
 	var path: String
 	
-	init(_ object: RestParse<T>, objectId: String, operations: [Operation] = []) {
+	init(_ object: Parse<T>, objectId: String, operations: [Operation] = []) {
 		path = "/classes/\(object.name)/\(objectId)"
 		self.operations = operations
 	}
@@ -459,7 +459,7 @@ public func ||<T>(left: Query<T>, right: Query<T>) -> Query<T> {
 }
 
 public func usersQuery() -> Query<User> {
-	let query = RestParse<User>().query()
+	let query = Parse<User>().query()
 	query.path = "/users"
 	return query
 }
@@ -709,7 +709,7 @@ extension Constraints {
 	}
 }
 
-extension RestParse {
+extension Parse {
 	
 	func paging(group: dispatch_group_t, skip: Int = 0, block: (JSON) -> Void) {
 		dispatch_group_enter(group)
