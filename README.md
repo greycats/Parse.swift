@@ -9,59 +9,66 @@
 
 ```swift
 
-setup(applicationId: "<# your application id #>", restKey: "<# rest key #>")
+    setup(applicationId: "<# your application id #>", restKey: "<# rest key #>")
 
-// then you can sync with your models
+    // then you can sync with your models
 
-let authors = Parse<Author>("authors").persistToLocal(maxAge: 86400)
-let documents = Parse<Document>("documents")
+    let authors = Parse<Author>().persistToLocal(maxAge: 86400)
+    let documents = Parse<Document>()
 
-class Author: ParseObject {
-    var firstName: String?
-    var lastName: String?
-    var birth: Int?
-    var id: Int
+    class Author: ParseObject {
+  
+        class var className: String { return "authors"}
+        var json: JSON?
+        var firstName: String?
+        var lastName: String?
+        var birth: Int?
+        var id: Int
     
-    required init(json: JSON) {
-        id = json["id"].intValue
-        birth = json["birth"].int
-        firstName = json["first_name"].string
-        lastName = json["last_name"].string
-    }
-}
-
-class Document: ParseObject {
-    var title: String
-    var author: Int?
-    var link: String?
-    var downloaded: Int?
-    
-    required init(json: JSON) {
-        title = json["title"].stringValue
-        author = json["author_id"].int
-        link = json["link"].string
-        downloaded = json["downloaded"].int
+        required init(json: JSON) {
+            self.json = json
+            id = json["id"].intValue
+            birth = json["birth"].int
+            firstName = json["first_name"].string
+            lastName = json["last_name"].string
+        }
     }
     
-    class func search(term: NSRegularExpression, then: ([Document], NSError?) -> Void) {
-        documents.query().whereKey("title", match: term).order("-downloaded").limit(50).get(then)
-    }
+    class Document: ParseObject {
+        var title: String
+        var author: Int?
+        var link: String?
+        var downloaded: Int?
     
-    class func documentsByAuthorName(firstName: String, last_name: String, birth: Int, then: ([Document], NSError?) -> Void) {
-        let firstNameQuery = authors.query().whereKey("first_name", equalTo: firstName)
-        let lastNameQuery = authors.query().whereKey("last_name", equalTo: lastName)
-        let ageQuery = authors.query().whereKey("birth", greaterThan: birth)
-        let authorQuery = (firstNameQuery || lastNameQuery) && ageQuery
-        
-        documents.query().whereKey("author_id", matchKey: "id", inQuery: authorQuery).get(then)
+        required init(json: JSON) {
+            title = json["title"].stringValue
+            author = json["author_id"].int
+            link = json["link"].string
+            downloaded = json["downloaded"].int
+        }
+    
+        class func search(term: NSRegularExpression, then: ([Document], NSError?) -> Void) {
+            documents.query().whereKey("title", match: term).order("-downloaded").limit(50).get(then)
+        }
+    
+        class func documentsByAuthorName(firstName: String, last_name: String, birth: Int, then: ([Document], NSError?) -> Void) {
+            let firstNameQuery = authors.query()
+                .whereKey("first_name", equalTo: firstName)
+                .whereKey("birth", greaterThan: birth)
+            let lastNameQuery = authors.query()
+                .whereKey("last_name", equalTo: lastName)
+                .whereKey("birth", greaterThan: birth)
+            let authorQuery = firstNameQuery || lastNameQuery
+            documents.query().whereKey("author_id", matchKey: "id", inQuery: authorQuery).get(then)
+        }
     }
-}
 ```
 
-* With `persistToLocal` phrase, authors will sync to local (your document directory), with defined primary key and max expire age. After then, all queries / subqueries to author, will be using local data if possible.
-* you can use swift infix operators `||` and `&&` on queries.
-* Notice generic support
+* with `persistToLocal` phrase, authors will sync to local (your document directory), with defined primary key and max expire age. After then, all queries / subqueries to author, will be using local data if possible.
+* you can use swift infix operators `||` on queries
 * `ParseObject` is a simple protocol. (You can use struct as you like)
+* save / update / relation / pointer queries all using generic types
+* ... full stack support
 
 ## Requirements
 
