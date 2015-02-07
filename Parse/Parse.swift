@@ -160,7 +160,7 @@ public class Parse<T: ParseObject> {
 }
 
 public enum Constraint {
-	case GreaterThan( String, AnyObject)
+	case GreaterThan(String, AnyObject)
 	case LessThan(String, AnyObject)
 	case EqualTo(String, AnyObject)
 	case MatchQuery(key: String, matchKey: String, inQuery: Constraints, search: Search)
