@@ -101,7 +101,7 @@ public enum ParseData {
 		}
 	}
 	
-	mutating func parse(dictionary: [String: String]) {
+	mutating func getToParse(dictionary: [String: String]) {
 		let __type = dictionary["__type"]!
 		switch __type {
 		case "Date":
@@ -131,7 +131,6 @@ public struct Search {
 public class Parse<T: ParseObject> {
 	
 	let name: String
-	
 	var search = Search()
 	
 	public init() {
@@ -142,14 +141,18 @@ public class Parse<T: ParseObject> {
 		return Query<T>(self, constraints: constraints)
 	}
 	
-	public func operation(objectId: String, operations: Operation...) -> Operations<T> {
-		return Operations<T>(self, objectId: objectId, operations: operations)
+	public func operation(objectId: String, operations: Operation...) -> UpdatingOperations<T> {
+		return UpdatingOperations<T>(self, objectId: objectId, operations: operations)
 	}
 	
-	func delete(ids: [String], done: dispatch_block_t) {
+	public func create(operations: Operation...) -> CreatingOperations<T> {
+		return CreatingOperations<T>(self, operations: operations)
 	}
 	
-	func saveAll(objects: [AnyObject], done: dispatch_block_t) {
+	func delete(ids: [T], done: dispatch_block_t) {
+	}
+	
+	func saveAll(objects: [T], done: dispatch_block_t) {
 	}
 	
 	func function(name: String, parameters: [String: AnyObject], done: dispatch_block_t) {
@@ -157,18 +160,18 @@ public class Parse<T: ParseObject> {
 }
 
 public enum Constraint {
-	case GreaterThan(key: String, object: AnyObject)
-	case LessThan(key: String, object: AnyObject)
-	case EqualTo(key: String, object: AnyObject)
+	case GreaterThan( String, AnyObject)
+	case LessThan(String, AnyObject)
+	case EqualTo(String, AnyObject)
 	case MatchQuery(key: String, matchKey: String, inQuery: Constraints, search: Search)
 	case DoNotMatchQuery(key: String, dontMatchKey: String, inQuery: Constraints, search: Search)
-	case MatchRegex(key: String, match: NSRegularExpression)
-	case Or(left: Constraints, right: Constraints)
-	case In(key: String, collection: [AnyObject])
-	case NotIn(key: String, collection: [AnyObject])
-	case RelatedTo(key: String, className: String, objectId: String)
+	case MatchRegex(String, NSRegularExpression)
+	case Or(Constraints, Constraints)
+	case In(String, [JSON])
+	case NotIn(String, [JSON])
+	case RelatedTo(String, [String: String])
 	
-	func whereClause(inout param: [String: AnyObject]) {
+	func getToParse(inout param: [String: AnyObject]) {
 		switch self {
 		case .GreaterThan(let key, let object):
 			param[key] = ["$gt": object]
@@ -189,11 +192,11 @@ public enum Constraint {
 		case .Or(let left, let right):
 			param["$or"] = [left.whereClause(), right.whereClause()]
 		case .In(let key, let collection):
-			param[key] = ["$in": collection]
+			param[key] = ["$in": collection.map({$0.object})]
 		case .NotIn(let key, let collection):
-			param[key] = ["$nin": collection]
-		case .RelatedTo(let key, let className, let objectId):
-			param["$relatedTo"] = ["object": ParseData.Pointer(className, objectId).toJSON()!, "key": key]
+			param[key] = ["$nin": collection.map({$0.object})]
+		case .RelatedTo(let key, let object):
+			param["$relatedTo"] = ["object": object, "key": key]
 		}
 	}
 }
@@ -226,12 +229,11 @@ public struct Constraints {
 	func whereClause() -> [String: AnyObject] {
 		var param: [String: AnyObject] = [:]
 		for constraint in inner {
-			constraint.whereClause(&param)
+			constraint.getToParse(&param)
 		}
 		return param
 	}
 }
-
 
 public class Query<T: ParseObject> {
 	
@@ -263,7 +265,8 @@ public class Query<T: ParseObject> {
 		constraints.append(constraint)
 		return self
 	}
-	public func whereKey<T: ParseObject>(key: String, equalTo object: T) -> Self {
+	
+	public func whereKey<U: ParseObject>(key: String, equalTo object: U) -> Self {
 		let objectId = object.json!["objectId"].string!
 		var to: AnyObject
 		if key == "objectId" {
@@ -271,33 +274,33 @@ public class Query<T: ParseObject> {
 		} else {
 			to = ParseData.Pointer(object.dynamicType.className,  objectId).toJSON()!
 		}
-		constraints.append(.EqualTo(key: key, object: to))
+		constraints.append(.EqualTo(key, to))
 		return self
 	}
 	
 	public func whereKey(key: String, equalTo object: AnyObject) -> Self {
 		let object: AnyObject = convertParseType(object)
-		constraints.append(.EqualTo(key: key, object: object))
+		constraints.append(.EqualTo(key, object))
 		return self
 	}
 	
 	public func whereKey(key: String, greaterThan object: AnyObject) -> Self {
 		let object: AnyObject = convertParseType(object)
-		constraint(.GreaterThan(key: key, object: object))
+		constraint(.GreaterThan(key, object))
 		return self
 	}
 	
 	public func whereKey(key: String, lessThan object: AnyObject) -> Self {
 		let object: AnyObject = convertParseType(object)
-		return constraint(.LessThan(key: key, object: object))
+		return constraint(.LessThan(key, object))
 	}
 	
 	public func whereKey(key: String, containedIn: [AnyObject]) -> Self {
-		return constraint(.In(key: key, collection: containedIn))
+		return constraint(.In(key, containedIn.map({JSON($0)})))
 	}
 	
 	public func whereKey(key: String, notContainedIn: [AnyObject]) -> Self {
-		return constraint(.NotIn(key: key, collection: notContainedIn))
+		return constraint(.NotIn(key, notContainedIn.map({JSON($0)})))
 	}
 	
 	public func whereKey<U: ParseObject>(key: String, matchKey: String, inQuery: Query<U>) -> Self {
@@ -309,11 +312,31 @@ public class Query<T: ParseObject> {
 	}
 	
 	public func whereKey(key: String, match: NSRegularExpression) -> Self {
-		return constraint(.MatchRegex(key: key, match: match))
+		return constraint(.MatchRegex(key, match))
+	}
+	
+	public func getOne(objectId: String, closure: (T?, NSError?) -> Void) {
+		self.whereKey("objectId", equalTo: objectId).getFirst(closure)
+	}
+	
+	public func relatedTo<U: ParseObject>(object: U, key: String) -> Self {
+		let objectId = object.json!["objectId"].string!
+		let to = ParseData.Pointer(object.dynamicType.className,  objectId).toJSON()!
+		return constraint(.RelatedTo(key, to))
+	}
+	
+	public func relatedTo(className: String, objectId: String, key: String) -> Self {
+		let to = ParseData.Pointer(className,  objectId).toJSON()!
+		return constraint(.RelatedTo(key, to))
 	}
 	
 	public func includeKeys(exp: String) -> Self {
 		parameters["keys"] = exp
+		return self
+	}
+	
+	public func includeRelation(exp: String) -> Self {
+		parameters["include"] = exp
 		return self
 	}
 	
@@ -343,9 +366,11 @@ public class Query<T: ParseObject> {
 	}
 	
 	public func getRaw(closure: (JSON, NSError?) -> Void) {
-		if useLocal {
-			if self.object.search.searchLocal(self, closure: closure) {
-				return
+		if constraints.allowsLocalSearch() {
+			if useLocal {
+				if self.object.search.searchLocal(self, closure: closure) {
+					return
+				}
 			}
 		}
 		
@@ -368,11 +393,12 @@ public class Query<T: ParseObject> {
 		fetchesCount = true
 		limit(1)
 		parameters["count"] = 1
-//		let start = clock()
+		let start = NSDate.timeIntervalSinceReferenceDate()
 		getRaw { (json, error) in
 			closure(json["count"].intValue, error)
-//			let end = clock()
-//			println("time cost \(end - start) unit")
+			let end = NSDate.timeIntervalSinceReferenceDate()
+			println("time cost \(end - start) unit")
+			
 		}
 	}
 	
@@ -397,6 +423,7 @@ public enum Operation {
 	case SetValue(String, AnyObject)
 	case AddRelation(String, String, String)
 	case RemoveRelation(String, String, String)
+	case SetSecurity(User)
 	
 	func parse(inout param: [String: AnyObject]) {
 		switch self {
@@ -414,22 +441,88 @@ public enum Operation {
 			param[key] = ["__op": "AddRelation", "objects": [ParseData.Pointer(className, objectId).toJSON()!]]
 		case .RemoveRelation(let key, let className, let objectId):
 			param[key] = ["__op": "RemoveRelation", "objects": [ParseData.Pointer(className, objectId).toJSON()!]]
+		case .SetSecurity(let user):
+			var acl = ["*": ["read": true]]
+			acl[user.json!["objectId"].string!] = ["read": true, "write": true]
+			param["ACL"] = acl
 		}
 	}
 }
 
-public class Operations<T: ParseObject> {
-	
+public class CreatingOperations<T: ParseObject> {
 	var operations: [Operation]
 	var path: String
 	
-	init(_ object: Parse<T>, objectId: String, operations: [Operation] = []) {
-		path = "/classes/\(object.name)/\(objectId)"
+	init(_ object: Parse<T>, operations: [Operation] = []) {
+		path = "/classes/\(object.name)"
 		self.operations = operations
 	}
 	
-	public func operation(operation: Operation) {
+	public func operation(operation: Operation) -> Self {
 		operations.append(operation)
+		return self
+	}
+	
+	public func set(key: String, object: AnyObject) -> Self {
+		return operation(.SetValue(key, object))
+	}
+	
+	public func setSecurity(readwrite: User) -> Self {
+		return operation(.SetSecurity(readwrite))
+	}
+	
+	public func save(closure: (T?, NSError?) -> Void) {
+		var param: [String: AnyObject] = [:]
+		for operation in operations {
+			operation.parse(&param)
+		}
+		println("saving \(param) to \(path)")
+		parseRequest(.POST, path, param) { (json, error) in
+			if let error = error {
+				closure(nil, error)
+				return
+			}
+			var object = JSON(param)
+			object["createdAt"] = json["createdAt"]
+			object["objectId"] = json["objectId"]
+			closure(T(json: object), nil)
+		}
+	}
+}
+
+public class UpdatingOperations<T: ParseObject>: CreatingOperations<T> {
+	
+	init(_ object: Parse<T>, objectId: String, operations: [Operation] = []) {
+		super.init(object, operations: operations)
+		path = "/classes/\(object.name)/\(objectId)"
+	}
+	
+	public func addUnique(key: String, object: AnyObject) -> Self {
+		return operation(.AddUnique(key, [object]))
+	}
+	
+	public func add(key: String, object: AnyObject) -> Self {
+		return operation(.Add(key, [object]))
+	}
+	
+	public func remove(key: String, object: AnyObject) -> Self {
+		return operation(.Remove(key, [object]))
+	}
+	
+	public func addUnique(key: String, objects: [AnyObject]) -> Self {
+		return operation(.AddUnique(key, objects))
+	}
+	
+	public func add(key: String, objects: [AnyObject]) -> Self {
+		return operation(.Add(key, objects))
+	}
+	
+	public func remove(key: String, objects: [AnyObject]) -> Self {
+		return operation(.Remove(key, objects))
+	}
+	
+	public func increase(key: String, amount: Int) -> Self {
+		return operation(.Increase(key, amount))
 	}
 	
 	public func addRelation<U: ParseObject>(key: String, to: U) -> Self {
@@ -454,7 +547,7 @@ public class Operations<T: ParseObject> {
 
 public func ||<T>(left: Query<T>, right: Query<T>) -> Query<T> {
 	let query = Query<T>(left.object)
-	query.constraints.append(.Or(left: left.constraints, right: right.constraints))
+	query.constraints.append(.Or(left.constraints, right.constraints))
 	return query
 }
 
@@ -469,7 +562,7 @@ public struct User: ParseObject {
 	public var json: JSON?
 	
 	public static var className: String { return "_User" }
-
+	
 	public init(json: JSON) {
 		self.json = json
 	}
@@ -552,18 +645,14 @@ public struct User: ParseObject {
 }
 
 // local search
+
 extension Search {
 	
 	func keys(matches: String, constraints: Constraints) -> [JSON] {
-		var results: [JSON] = []
 		if let cache = memcache {
-			for json in cache {
-				if constraints.match(json) {
-					results.append(json[matches])
-				}
-			}
+			return cache.filter({constraints.match($0)})
 		}
-		return results
+		return []
 	}
 	
 	func searchLocal<T: ParseObject>(query: Query<T>, closure: (JSON, NSError?) -> Void) -> Bool {
@@ -623,21 +712,9 @@ extension Constraint {
 			let string = json[key].stringValue
 			return regexp.firstMatchInString(string, options: nil, range: NSMakeRange(0, string.utf16Count)) != nil
 		case .In(let key, let keys):
-			let obj = json[key]
-			for x in keys {
-				if JSON(x) == obj {
-					return true
-				}
-			}
-			return false
+			return contains(keys, json[key])
 		case .NotIn(let key, let keys):
-			let obj = json[key]
-			for x in keys {
-				if JSON(x) == obj {
-					return false
-				}
-			}
-			return true
+			return !contains(keys, json[key])
 		case .Or(let left, let right):
 			return left.match(json) || right.match(json)
 		default:
@@ -667,13 +744,31 @@ extension Constraint: Printable {
 			return "\(key) matches \(matchKey) from \(inQuery.className) where \(inQuery.whereClause())"
 		case .DoNotMatchQuery(let key, let dontMatchKey, let inQuery, let search):
 			return "\(key) doesn't match \(dontMatchKey) from \(inQuery.className) where \(inQuery.whereClause())"
-		case .RelatedTo(let key, let className, let objectId):
-			return "related to \(className) \(objectId) under key \(key)"
+		case .RelatedTo(let key, let object):
+			return "related to \(object) under key \(key)"
 		}
 	}
 }
 
 extension Constraints {
+	
+	func allowsLocalSearch() -> Bool {
+		for constraint in inner {
+			switch constraint {
+			case .EqualTo(let key, let to):
+				if let data = to as? [String: AnyObject] {
+					if let _type = data["__type"] as? String {
+						if _type == "Pointer" {
+							return false
+						}
+					}
+				}
+			default:
+				continue
+			}
+		}
+		return true
+	}
 	
 	mutating func replaceSubQueries() {
 		
@@ -682,11 +777,11 @@ extension Constraints {
 			switch constraint {
 			case .MatchQuery(let key, let matchKey, let constraints, let search):
 				let keys = search.keys(matchKey, constraints: constraints)
-				inner[index] = Constraint.In(key: key, collection: keys.map({$0.object}))
+				inner[index] = Constraint.In(key, keys)
 				replaced = true
 			case .DoNotMatchQuery(let key, let dontMatchKey, let constraints, let search):
 				let keys = search.keys(dontMatchKey, constraints: constraints)
-				inner[index] = Constraint.NotIn(key: key, collection: keys.map({$0.object}))
+				inner[index] = Constraint.NotIn(key, keys)
 				replaced = true
 			default:
 				continue
