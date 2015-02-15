@@ -1,4 +1,4 @@
-# Parse.swift
+# SwiftyParse
 
 [![CI Status](http://img.shields.io/travis/Rex Sheng/SwiftyParse.svg?style=flat)](https://travis-ci.org/Rex Sheng/SwiftyParse)
 [![Version](https://img.shields.io/cocoapods/v/SwiftyParse.svg?style=flat)](http://cocoadocs.org/docsets/SwiftyParse)
@@ -8,52 +8,60 @@
 ## Usage
 
 ```swift
+import Parse
 
-    setup(applicationId: "<# your application id #>", restKey: "<# rest key #>")
+Client.setup(applicationId: "<# your application id #>", restKey: "<# rest key #>")
 
-    // then you can sync with your models
+// then you can sync with your models to local, or not
 
-    let authors = Parse<Author>().persistToLocal(maxAge: 86400)
-    let documents = Parse<Document>()
+let authors = Parse<Author>().persistent(maxAge: 86400)
 
-    class Author: ParseObject {
-  
-        class var className: String { return "authors"}
-        var json: Data?
-        var createdAt: NSDate
-        
-        required init(json: Data) {
-            self.json = json
-            createdAt = json.date("createdAt")
-        }
+class Author: ParseObject {
+    class var className: String { return "authors"}
+    
+    var json: Data?
+    
+    // you can link properies
+    var createdAt: NSDate
+    var firstName: String? {
+    	return json?.value("first_name").string
     }
     
-    class Document: ParseObject {
-        var json: Data?
-       
-        required init(json: Data) {
-            self.json = json
-        }
-    
-        class func search(term: NSRegularExpression, then: ([Document], NSError?) -> Void) {
-            documents.query().whereKey("title", match: term).order("-downloaded").limit(50).get(then)
-        }
-    
-        class func documentsByAuthorName(firstName: String, last_name: String, birth: Int, then: ([Document], NSError?) -> Void) {
-            let firstNameQuery = authors.query()
-                .whereKey("first_name", equalTo: firstName)
-                .whereKey("birth", greaterThan: birth)
-            let lastNameQuery = authors.query()
-                .whereKey("last_name", equalTo: lastName)
-                .whereKey("birth", greaterThan: birth)
-            let authorQuery = firstNameQuery || lastNameQuery
-            Query<Document>().whereKey("author_id", matchKey: "id", inQuery: authorQuery).get(then)
-        }
-        
-        class func documentsByAuthor(author: Author, then: ([Document], NSError?) -> Void) {
-            Query<Document>().whereKey("author", equalTo: author).get(then)
-        }
+    required init(json: Data) {
+        self.json = json
+        createdAt = json.date("createdAt")
     }
+    
+    func documents(closure: ([Document], NSError?) -> Void) {
+        Query<Document>().whereKey("author", equalTo: self).get(closure)
+    }
+}
+
+class Document: ParseObject {
+    class var className: String { return "documents"}
+    
+    var json: Data?
+   
+    required init(json: Data) {
+        self.json = json
+    }
+
+    class func search(term: NSRegularExpression, then: ([Document], NSError?) -> Void) {
+    	// defaults to local search
+        documents.query().local(false).whereKey("title", match: term).order("-downloaded,name").limit(50).get(then)
+    }
+
+    class func documentsByAuthorName(firstName: String, last_name: String, birth: Int, then: ([Document], NSError?) -> Void) {
+        let firstNameQuery = authors.query()
+            .whereKey("first_name", equalTo: firstName)
+            .whereKey("birth", greaterThan: birth)
+        let lastNameQuery = authors.query()
+            .whereKey("last_name", equalTo: lastName)
+            .whereKey("birth", greaterThan: birth)
+        let authorQuery = firstNameQuery || lastNameQuery
+        Query<Document>().whereKey("author_id", matchKey: "id", inQuery: authorQuery).get(then)
+    }
+}
 ```
 
 To replace author_id with author reference:
@@ -94,14 +102,14 @@ if you are targeting iOS7, I suggest you copy the source code and comment out `i
 
 ## Installation
 
-Greycats.swift is available through [CocoaPods](http://cocoapods.org). To install
+SwiftyParse is available through [CocoaPods](http://cocoapods.org). To install
 it, simply add the following line to your Podfile:
 
     pod "SwiftyParse"
 
 ## Author
 
-Rex Sheng, http://github.com/b051
+[Rex Sheng](http://github.com/b051)
 
 ## License
 
