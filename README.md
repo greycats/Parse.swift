@@ -88,6 +88,10 @@ func convertBoard<T: ParseObject>(group: dispatch_group_t, type: T.Type) {
 
 ## Requirements
 
+Alamofire
+
+if you are targeting iOS7, I suggest you copy the source code and comment out `import Alamofire`
+
 ## Installation
 
 Greycats.swift is available through [CocoaPods](http://cocoapods.org). To install
@@ -97,7 +101,7 @@ it, simply add the following line to your Podfile:
 
 ## Author
 
-Rex Sheng, shengning@gmail.com
+Rex Sheng, http://github.com/b051
 
 ## License
 
