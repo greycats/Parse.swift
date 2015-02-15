@@ -11,9 +11,7 @@
 		CF1D34371A837BD500CF3776 /* Parse.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF1D342B1A837BD500CF3776 /* Parse.framework */; };
 		CF1D343E1A837BD500CF3776 /* ParseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF1D343D1A837BD500CF3776 /* ParseTests.swift */; };
 		CF1D344B1A837BE200CF3776 /* Parse.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF1D34481A837BE200CF3776 /* Parse.swift */; };
-		CF377AAC1A837FDC003354AA /* SwiftyJSON.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF4CA77F1A837E1800B298D8 /* SwiftyJSON.framework */; };
 		CF377AAD1A837FDC003354AA /* Alamofire.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF4CA7801A837E1800B298D8 /* Alamofire.framework */; };
-		CF4CA7811A837E1800B298D8 /* SwiftyJSON.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF4CA77F1A837E1800B298D8 /* SwiftyJSON.framework */; };
 		CF4CA7821A837E1800B298D8 /* Alamofire.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF4CA7801A837E1800B298D8 /* Alamofire.framework */; };
 /* End PBXBuildFile section */
 
@@ -35,7 +33,6 @@
 		CF1D343C1A837BD500CF3776 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		CF1D343D1A837BD500CF3776 /* ParseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParseTests.swift; sourceTree = "<group>"; };
 		CF1D34481A837BE200CF3776 /* Parse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Parse.swift; sourceTree = "<group>"; };
-		CF4CA77F1A837E1800B298D8 /* SwiftyJSON.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftyJSON.framework; path = Carthage/Build/iOS/SwiftyJSON.framework; sourceTree = "<group>"; };
 		CF4CA7801A837E1800B298D8 /* Alamofire.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Alamofire.framework; path = Carthage/Build/iOS/Alamofire.framework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -44,7 +41,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CF4CA7811A837E1800B298D8 /* SwiftyJSON.framework in Frameworks */,
 				CF4CA7821A837E1800B298D8 /* Alamofire.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -53,7 +49,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CF377AAC1A837FDC003354AA /* SwiftyJSON.framework in Frameworks */,
 				CF377AAD1A837FDC003354AA /* Alamofire.framework in Frameworks */,
 				CF1D34371A837BD500CF3776 /* Parse.framework in Frameworks */,
 			);
@@ -65,7 +60,6 @@
 		CF1D34211A837BD500CF3776 = {
 			isa = PBXGroup;
 			children = (
-				CF4CA77F1A837E1800B298D8 /* SwiftyJSON.framework */,
 				CF4CA7801A837E1800B298D8 /* Alamofire.framework */,
 				CF1D342D1A837BD500CF3776 /* Parse */,
 				CF1D343A1A837BD500CF3776 /* ParseTests */,

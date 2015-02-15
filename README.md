@@ -64,6 +64,30 @@
     }
 ```
 
+To replace board_id with board reference:
+```swift
+func convertBoard<T: ParseObject>(group: dispatch_group_t, type: T.Type) {
+	Query<T>().whereKey("board_id", exists: true).each(group, concurrent: 4) { (json, complete) in
+		let json = Data(raw: json)
+		Query<Board>().whereKey("board_id", equalTo: json.value("board_id").string!).first { (board, error) in
+			let oid = json.objectId
+			if let board = board {
+				Parse<T>.operation(oid, operations: .DeleteColumn("board_id"))
+					.set("board", value: board).update { (json, error) in
+						println("json = \(json) \(error)")
+						complete()
+				}
+			} else {
+				Parse<T>.operation(oid).delete { (error) in
+					println("delete \(T.className) met error \(error)")
+					complete()
+				}
+			}
+		}
+	}
+}
+```
+
 * with `persistToLocal` phrase, authors will sync to local (your document directory), with defined primary key and max expire age. After then, all queries / subqueries to author, will be using local data if possible.
 * you can use swift infix operators `||` on queries
 * `ParseObject` is a simple protocol. (You can use struct as you like)
