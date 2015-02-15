@@ -98,7 +98,7 @@ func convertBoard<T: ParseObject>(group: dispatch_group_t, type: T.Type) {
 
 Alamofire
 
-if you are targeting iOS7, I suggest you copy the source code and comment out `import Alamofire`
+if you are targeting iOS7, I suggest you to grab the source code and comment out `import Alamofire`, yeah, and copy Alamofire to your project.
 
 ## Installation
 
