@@ -19,32 +19,20 @@
     class Author: ParseObject {
   
         class var className: String { return "authors"}
-        var json: JSON?
-        var firstName: String?
-        var lastName: String?
-        var birth: Int?
-        var id: Int
-    
-        required init(json: JSON) {
+        var json: Data?
+        var createdAt: NSDate
+        
+        required init(json: Data) {
             self.json = json
-            id = json["id"].intValue
-            birth = json["birth"].int
-            firstName = json["first_name"].string
-            lastName = json["last_name"].string
+            createdAt = json.date("createdAt")
         }
     }
     
     class Document: ParseObject {
-        var title: String
-        var author: Int?
-        var link: String?
-        var downloaded: Int?
-    
-        required init(json: JSON) {
-            title = json["title"].stringValue
-            author = json["author_id"].int
-            link = json["link"].string
-            downloaded = json["downloaded"].int
+        var json: Data?
+       
+        required init(json: Data) {
+            self.json = json
         }
     
         class func search(term: NSRegularExpression, then: ([Document], NSError?) -> Void) {
@@ -59,21 +47,25 @@
                 .whereKey("last_name", equalTo: lastName)
                 .whereKey("birth", greaterThan: birth)
             let authorQuery = firstNameQuery || lastNameQuery
-            documents.query().whereKey("author_id", matchKey: "id", inQuery: authorQuery).get(then)
+            Query<Document>().whereKey("author_id", matchKey: "id", inQuery: authorQuery).get(then)
+        }
+        
+        class func documentsByAuthor(author: Author, then: ([Document], NSError?) -> Void) {
+            Query<Document>().whereKey("author", equalTo: author).get(then)
         }
     }
 ```
 
-To replace board_id with board reference:
+To replace author_id with author reference:
 ```swift
 func convertBoard<T: ParseObject>(group: dispatch_group_t, type: T.Type) {
-	Query<T>().whereKey("board_id", exists: true).each(group, concurrent: 4) { (json, complete) in
+	Query<T>().whereKey("author_id", exists: true).each(group, concurrent: 4) { (json, complete) in
 		let json = Data(raw: json)
-		Query<Board>().whereKey("board_id", equalTo: json.value("board_id").string!).first { (board, error) in
+		Query<Author>().whereKey("id", equalTo: json.value("author_id").string!).first { (author, error) in
 			let oid = json.objectId
-			if let board = board {
-				Parse<T>.operation(oid, operations: .DeleteColumn("board_id"))
-					.set("board", value: board).update { (json, error) in
+			if let author = author {
+				Parse<T>.operation(oid, operations: .DeleteColumn("author_id"))
+					.set("author", value: author).update { (json, error) in
 						println("json = \(json) \(error)")
 						complete()
 				}
@@ -88,7 +80,7 @@ func convertBoard<T: ParseObject>(group: dispatch_group_t, type: T.Type) {
 }
 ```
 
-* with `persistToLocal` phrase, authors will sync to local (your document directory), with defined primary key and max expire age. After then, all queries / subqueries to author, will be using local data if possible.
+* with `persistent` phrase, authors will sync to local (your document directory), with defined primary key and max expire age. After then, all queries / subqueries to author, will be using local data if possible.
 * you can use swift infix operators `||` on queries
 * `ParseObject` is a simple protocol. (You can use struct as you like)
 * save / update / relation / pointer queries all using generic types
