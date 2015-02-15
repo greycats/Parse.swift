@@ -85,7 +85,7 @@ public enum Operation {
 	case Remove(String, [AnyObject])
 	case Add(String, [AnyObject])
 	case Increase(String, Int)
-	case SetValue(String, AnyObject)
+	case SetValue(String, ParseType)
 	case AddRelation(String, Pointer)
 	case RemoveRelation(String, Pointer)
 	case SetSecurity(User)
@@ -474,7 +474,7 @@ extension Operation: QueryComposer {
 		case .Increase(let key, let args):
 			param[key] = ["__op": "Increment", "amount": args]
 		case .SetValue(let key, let args):
-			param[key] = args
+			param[key] = args.json
 		case .AddRelation(let key, let pointer):
 			param[key] = ["__op": "AddRelation", "objects": [pointer.json]]
 		case .RemoveRelation(let key, let pointer):
@@ -664,16 +664,19 @@ extension ClassOperations {
 		return self
 	}
 	
-	public func set(key: String, value: Int) -> Self {
-		return operation(.SetValue(key, value))
-	}
-	
-	public func set(key: String, value: String) -> Self {
-		return operation(.SetValue(key, value))
+	public func set(key: String, value: ComparableKeyType) -> Self {
+		if let date = value as? NSDate {
+			return operation(.SetValue(key, Date(date: date)))
+		}
+		return operation(.SetValue(key, Value(value)))
 	}
 	
 	public func set<U: ParseObject>(key: String, value: U) -> Self {
-		return operation(.SetValue(key, Pointer(object: value).json))
+		return operation(.SetValue(key, Pointer(object: value)))
+	}
+	
+	public func set<U: ParseType>(key: String, value: U) -> Self {
+		return operation(.SetValue(key, value))
 	}
 	
 	public func setSecurity(readwrite: User) -> Self {
@@ -681,13 +684,11 @@ extension ClassOperations {
 	}
 	
 	public func addRelation<U: ParseObject>(key: String, to: U) -> Self {
-		operation(.AddRelation(key, Pointer(object: to)))
-		return self
+		return operation(.AddRelation(key, Pointer(object: to)))
 	}
 }
 
 extension ObjectOperations {
-	
 	public func addUnique(key: String, object: AnyObject) -> Self {
 		return operation(.AddUnique(key, [object]))
 	}
@@ -717,8 +718,7 @@ extension ObjectOperations {
 	}
 	
 	public func removeRelation<U: ParseObject>(key: String, to: U) -> Self {
-		operation(.RemoveRelation(key, Pointer(object: to)))
-		return self
+		return operation(.RemoveRelation(key, Pointer(object: to)))
 	}
 }
 
@@ -771,7 +771,7 @@ extension Data {
 	}
 }
 
-func == (lhs: ParseType, rhs: ParseType) -> Bool {
+func ==(lhs: ParseType, rhs: ParseType) -> Bool {
 	if let left = lhs as? Date {
 		if let right = rhs as? Date {
 			return left == right
@@ -786,7 +786,7 @@ func == (lhs: ParseType, rhs: ParseType) -> Bool {
 	return false
 }
 
-func < (lhs: ParseType, rhs: ParseType) -> Bool {
+func <(lhs: ParseType, rhs: ParseType) -> Bool {
 	if let left = lhs as? Date {
 		if let right = rhs as? Date {
 			return left < right
@@ -1012,7 +1012,6 @@ extension Query {
 }
 
 struct LocalCache<T: ParseObject> {
-	
 	static func loadCache() -> [String: AnyObject]? {
 		let key = "v2.\(T.className).json"
 		let paths = NSSearchPathForDirectoriesInDomains(.DocumentDirectory, .UserDomainMask, true)
