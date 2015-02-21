@@ -92,7 +92,7 @@ func convertBoard<T: ParseObject>(group: dispatch_group_t, type: T.Type) {
 * you can use swift infix operators `||` on queries
 * `ParseObject` is a simple protocol. (You can use struct as you like)
 * save / update / relation / pointer queries all using generic types
-* ... full stack support
+* automatically sync relationship to local, and update when add/remove relations
 
 ## Requirements
 
