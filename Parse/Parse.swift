@@ -237,11 +237,9 @@ public struct User: ParseObject {
 	public var objectId: String {
 		return json.objectId
 	}
-	
 	public init(json: Data) {
 		self.json = json
 	}
-	
 	var username: String {
 		return json.value("username").string!
 	}
@@ -252,6 +250,14 @@ public struct User: ParseObject {
 protocol _ParseType: ParseType {
 	typealias RawValue
 	init?(_ json: RawValue)
+}
+
+struct AnyWrapper: _ParseType {
+	typealias RawValue = AnyObject
+	var json: RawValue
+	init(_ json: RawValue) {
+		self.json = json
+	}
 }
 
 extension Date: _ParseType {
@@ -678,6 +684,11 @@ extension _Query {
 		return constraint(.NotIn(key, notContainedIn))
 	}
 	
+	public func whereKey(key: String, notContainedIn: [String]) -> Self {
+		let values = notContainedIn.map({ Value($0) })
+		return constraint(.NotIn(key, values))
+	}
+	
 	public func whereKey<U: ParseObject>(key: String, matchKey: String, inQuery: Query<U>) -> Self {
 		return constraint(.MatchQuery(key: key, matchKey: matchKey, inQuery: inQuery.constraints))
 	}
@@ -746,6 +757,9 @@ extension ClassOperations {
 	public func operation(operation: Operation) -> Self {
 		operations.append(operation)
 		return self
+	}
+	public func set(key: String, value: [AnyObject]) -> Self {
+		return operation(.SetValue(key, AnyWrapper(value)))
 	}
 	
 	public func set(key: String, value: ComparableKeyType) -> Self {
@@ -1112,8 +1126,8 @@ struct LocalCache<T: ParseObject> {
 		let paths = NSSearchPathForDirectoriesInDomains(.DocumentDirectory, .UserDomainMask, true)
 		if let root = paths.first as? NSString {
 			let file = root.stringByAppendingPathComponent(key)
-			println("loading from file \(file)")
 			if let data = NSData(contentsOfFile: file) {
+				println("loading from file \(file)")
 				if let json = NSJSONSerialization.JSONObjectWithData(data, options: .AllowFragments, error: nil) as? [String: AnyObject] {
 					return json
 				}
@@ -1398,6 +1412,8 @@ func path(className: String, objectId: String? = nil) -> String {
 	switch className {
 	case "_User":
 		path = "/users"
+	case "_Installation":
+		path = "/installations"
 	default:
 		path = "/classes/\(className)"
 	}
@@ -1454,7 +1470,7 @@ extension ObjectOperations {
 }
 
 public func parseFunction(name: String, parameters: [String: AnyObject], done: ([String: AnyObject]?, NSError?) -> Void) {
-	Client.request(.POST, "/function/\(name)", parameters, done)
+	Client.request(.POST, "/functions/\(name)", parameters, done)
 }
 
 public protocol UserFunctions {
@@ -1533,9 +1549,6 @@ extension User: UserFunctions {
 			}
 		}
 	}
-}
-
-extension Query {
 }
 
 extension Parse {
@@ -1630,5 +1643,60 @@ extension Constraint: Printable {
 extension Constraints: Printable {
 	public var description: String {
 		return "\(inner)"
+	}
+}
+
+//MARK: Push
+
+public struct Installation: ParseObject {
+	public static var className: String { return "_Installation" }
+	public var json: Data
+	public init(json: Data) {
+		self.json = json
+	}
+}
+
+public struct Push {
+	public var json: Data
+	public init(json: Data) {
+		self.json = json
+	}
+}
+
+extension NSData {
+	public var hexadecimalString: NSString {
+		var bytes = [UInt8](count: length, repeatedValue: 0)
+		getBytes(&bytes, length: length)
+		
+		let hexString = NSMutableString()
+		for byte in bytes {
+			hexString.appendFormat("%02x", UInt(byte))
+		}
+		
+		return NSString(string: hexString)
+	}
+}
+
+extension Installation {
+	static var currentInstallation: Installation?
+	
+	public static func register(deviceToken: NSData, channels: [String], otherInfo: ((ClassOperations<Installation>) -> Void)? = nil) {
+		let op = Parse<Installation>.operation()
+			.set("deviceType", value: "ios")
+			.set("deviceToken", value: deviceToken.hexadecimalString)
+			.set("channels", value: channels)
+		otherInfo?(op)
+		op.save { (installation, error) in
+			self.currentInstallation = installation
+		}
+	}
+}
+
+extension Push {
+	public static func send(data: [String: AnyObject], query: Query<Installation>) {
+		var _where: [String: AnyObject] = [:]
+		query.composeQuery(&_where)
+		println("push where = \(_where)")
+		Client.request(.POST, "/push", ["where": _where, "data": data]) { _ in }
 	}
 }
