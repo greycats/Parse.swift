@@ -71,6 +71,10 @@ public struct ACL {
 
 public struct Data {
 	let raw: [String: AnyObject]
+	private var pending: [String: ParseType]?
+	public init(raw: [String: AnyObject]) {
+		self.raw = raw
+	}
 }
 
 public enum Constraint {
@@ -604,7 +608,15 @@ extension Parse {
 	}
 	
 	public class func operation(on: T, operations: Operation...) -> ObjectOperations<T> {
-		return ObjectOperations<T>(on.json.objectId, operations: operations)
+		let op = ObjectOperations<T>(on.json.objectId, operations: operations)
+		if let pending = on.json.pending {
+			for (key, value) in pending {
+				if let value = value as? Value {
+					op.set(key, value: value)
+				}
+			}
+		}
+		return op
 	}
 	
 	public class func operation(operations: Operation...) -> ClassOperations<T> {
@@ -630,7 +642,11 @@ extension _Query {
 	}
 	
 	public func whereKey<U: ParseType>(key: String, equalTo object: U) -> Self {
-		return constraint(.EqualTo(key, object))
+		if key == "objectId" && object is Pointer {
+			return constraint(.EqualTo(key, Value((object as Pointer).objectId)))
+		} else {
+			return constraint(.EqualTo(key, object))
+		}
 	}
 	
 	public func whereKey(key: String, equalTo object: ComparableKeyType) -> Self {
@@ -709,8 +725,12 @@ extension _Query {
 		return constraint(.RelatedTo(key, Pointer(object: object)))
 	}
 	
+	public func relatedTo(pointer: Pointer, key: String) -> Self {
+		return constraint(.RelatedTo(key, pointer))
+	}
+	
 	public func relatedTo(className: String, objectId: String, key: String) -> Self {
-		return constraint(.RelatedTo(key, Pointer(className: className,  objectId: objectId)))
+		return relatedTo(Pointer(className: className,  objectId: objectId), key: key)
 	}
 	
 	public func keys(exp: String) -> Self {
@@ -862,10 +882,17 @@ public func <(lhs: Date, rhs: Date) -> Bool {
 
 extension Data {
 	subscript(key: String) -> ParseType {
-		if let d = date(key) {
-			return d
+		get {
+			if let d = date(key) {
+				return d
+			}
+			return value(key)
 		}
-		return value(key)
+		set {
+			var _pending = pending ?? [:]
+			_pending[key] = newValue
+			pending = _pending
+		}
 	}
 }
 
@@ -916,7 +943,6 @@ struct LocalPersistence {
 	static var classCache: [String: [Data]] = [:]
 	static var relationCache: [String: [Data]] = [:]
 	static let local_search_queue = dispatch_queue_create(nil, DISPATCH_QUEUE_CONCURRENT)
-	
 }
 
 protocol LocalMatch {
@@ -1354,11 +1380,11 @@ public struct Client {
 		}
 		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) {
 			var request = self.manager!.request(method, pathString, parameters: parameters, encoding: encoding)
-			//			println("\(request.cURLRepresentation())")
+			println("\(request.cURLRepresentation())")
 			request.responseJSON { (req, res, json, error) in
 				if let object = json as? [String: AnyObject] {
 					if object["error"] != nil && object["code"] != nil {
-						closure(nil, NSError(domain: ParseErrorDomain, code: object["code"] as Int, userInfo: object))
+						closure(nil, NSError(domain: ParseErrorDomain, code: object["code"] as Int, userInfo: [NSLocalizedDescriptionKey: object["error"] as String]))
 						return
 					}
 					closure(object, error)
@@ -1370,12 +1396,18 @@ public struct Client {
 		}
 	}
 	
-	static func loginSession(token: String, block: (NSError?) -> Void) {
+	static func updateSession(token: String?) {
 		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) {
 			if var headers = self.manager!.session.configuration.HTTPAdditionalHeaders {
 				headers["X-Parse-Session-Token"] =  token
 				self.manager!.session.configuration.HTTPAdditionalHeaders = headers
 			}
+		}
+	}
+	
+	static func loginSession(token: String, block: (NSError?) -> Void) {
+		updateSession(token)
+		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) {
 			self.request(.GET, "/users/me", nil) { (json, error) in
 				block(error)
 			}
@@ -1473,15 +1505,7 @@ public func parseFunction(name: String, parameters: [String: AnyObject], done: (
 	Client.request(.POST, "/functions/\(name)", parameters, done)
 }
 
-public protocol UserFunctions {
-	class func currentUser(block: (User?, NSError?) -> Void)
-	class var currentUser: User? { get }
-	class func logIn(username: String, password: String, callback: (User?, NSError?) -> Void)
-	class func logOut()
-	class func signUp(username: String, password: String, extraInfo: [String: AnyObject]?, callback: (User?, NSError?) -> Void)
-}
-
-extension User: UserFunctions {
+extension User {
 	public static var currentUser: User? {
 		if let object = NSUserDefaults.standardUserDefaults().objectForKey("user") as? [String: AnyObject] {
 			let user = User(json: Data(raw: object))
@@ -1492,29 +1516,39 @@ extension User: UserFunctions {
 	
 	public static func currentUser(block: (User?, NSError?) -> Void) {
 		if let user = currentUser {
-			block(user, nil)
-			println("returned user may not be valid server side")
-			Client.loginSession(user.json.value("sessionToken").string!) { error in
-				if let error = error {
-					println("session login failed \(user.username) \(error)")
-					block(user, error)
+			println("user\(user.json.raw)")
+			if let token = user.json.value("sessionToken").string {
+				block(user, nil)
+				println("returned user may not be valid server side")
+				Client.loginSession(token) { error in
+					if let error = error {
+						println("session login failed \(user.username) \(error)")
+						block(user, error)
+					}
 				}
+				return
 			}
-		} else {
-			block(nil, nil)
 		}
+		block(nil, nil)
 	}
 	
 	public static func logIn(username: String, password: String, callback: (User?, NSError?) -> Void) {
+		Client.updateSession(nil)
 		Client.request(.GET, "/login", ["username": username, "password": password]) { (json, error) in
 			if let error = error {
 				return callback(nil, error)
 			}
 			if let json = json {
-				NSUserDefaults.standardUserDefaults().setObject(json, forKey: "user")
-				NSUserDefaults.standardUserDefaults().synchronize()
-				println("logIn user \(json)")
-				callback(User(json: Data(raw: json)), error)
+				let user = User(json: Data(raw: json))
+				if let token = user.json.value("sessionToken").string {
+					NSUserDefaults.standardUserDefaults().setObject(json, forKey: "user")
+					NSUserDefaults.standardUserDefaults().synchronize()
+					Client.updateSession(token)
+					println("logIn user \(json)")
+					callback(user, nil)
+				} else {
+					callback(nil, NSError(domain: ParseErrorDomain, code: 206, userInfo: [NSLocalizedDescriptionKey: "Failed to establish session"]))
+				}
 			}
 		}
 	}
@@ -1522,30 +1556,32 @@ extension User: UserFunctions {
 	public static func logOut() {
 		NSUserDefaults.standardUserDefaults().removeObjectForKey("user")
 		NSUserDefaults.standardUserDefaults().synchronize()
+		Client.updateSession(nil)
 	}
 	
-	public static func signUp(username: String, password: String, extraInfo: [String: AnyObject]? = nil, callback: (User?, NSError?) -> Void) {
-		var param: [String: AnyObject] = ["username": username, "password": password]
-		if var info = extraInfo {
+	public static func signUp(username: String, password: String, extraInfo: [String: ComparableKeyType]? = nil, callback: (User?, NSError?) -> Void) {
+		Client.updateSession(nil)
+		let op = Parse<User>.operation().set("username", value: username).set("password", value: password)
+		if let info = extraInfo {
 			for (k, v) in info {
-				param.updateValue(v, forKey: k)
+				op.set(k, value: v)
 			}
 		}
-		Client.request(.POST, "/users", param) { (json, error) in
+		op.save { (user, error) -> Void in
 			if error != nil {
+				println("error \(error)")
 				return callback(nil, error)
 			}
-			if var user = json {
-				user["username"] = username
-				if var info = extraInfo {
-					for (k, v) in info {
-						user[k] = v
-					}
+			if let user = user {
+				if let token = user.json.value("sessionToken").string {
+					NSUserDefaults.standardUserDefaults().setObject(user.json.raw, forKey: "user")
+					NSUserDefaults.standardUserDefaults().synchronize()
+					Client.updateSession(token)
+					println("signUp user \(user)")
+					callback(user, error)
+				} else {
+					self.logIn(username, password: password, callback: callback)
 				}
-				NSUserDefaults.standardUserDefaults().setObject(user, forKey: "user")
-				NSUserDefaults.standardUserDefaults().synchronize()
-				println("signUp user \(user)")
-				callback(User(json: Data(raw: user)), error)
 			}
 		}
 	}
@@ -1687,7 +1723,17 @@ extension Installation {
 			.set("channels", value: channels)
 		otherInfo?(op)
 		op.save { (installation, error) in
-			self.currentInstallation = installation
+			if let installation = installation {
+				self.currentInstallation = installation
+				println("current installation \(installation.json.raw)")
+			}
+		}
+	}
+	
+	public static func clearBadge() {
+		if var installation = Installation.currentInstallation {
+			installation.json["badge"] = Value(0)
+			Parse<Installation>.operation(installation).update { _ in }
 		}
 	}
 }
