@@ -5,7 +5,6 @@
 //
 //
 
-import Foundation
 import Alamofire
 typealias Method = Alamofire.Method
 
@@ -72,7 +71,7 @@ public struct ACL {
 public struct Data {
 	let raw: [String: AnyObject]
 	private var pending: [String: ParseType]?
-	public init(raw: [String: AnyObject]) {
+	public init(_ raw: [String: AnyObject]) {
 		self.raw = raw
 	}
 }
@@ -99,7 +98,7 @@ public enum Operation {
 	case SetValue(String, ParseType)
 	case AddRelation(String, Pointer)
 	case RemoveRelation(String, Pointer)
-	case SetSecurity(User)
+	case SetSecurity(String)
 	case DeleteColumn(String)
 }
 
@@ -170,7 +169,7 @@ public class _Query {
 		getRaw { (json, error) in
 			if let json = json {
 				if let array = json["results"] as? [[String: AnyObject]] {
-					closure(array.map { Data(raw: $0) }, error)
+					closure(array.map { Data($0) }, error)
 					return
 				}
 			}
@@ -218,7 +217,7 @@ public func ||<T>(left: Query<T>, right: Query<T>) -> Query<T> {
 	return Query<T>(constraints: .Or(left.constraints, right.constraints))
 }
 
-public class ClassOperations<T: ParseObject> {
+public class _Operations<T: ParseObject> {
 	var operations: [Operation]
 	
 	init(operations: [Operation]) {
@@ -226,26 +225,18 @@ public class ClassOperations<T: ParseObject> {
 	}
 }
 
-public class ObjectOperations<T: ParseObject>: ClassOperations<T> {
-	let objectId: String
-	
-	init(_ objectId: String, operations: [Operation]) {
-		self.objectId = objectId
-		super.init(operations: operations)
+public class ClassOperations<T: ParseObject>: _Operations<T> {
+	public init() {
+		super.init(operations: [])
 	}
 }
 
-public struct User: ParseObject {
-	public static var className: String { return "_User" }
-	public var json: Data
-	public var objectId: String {
-		return json.objectId
-	}
-	public init(json: Data) {
-		self.json = json
-	}
-	var username: String {
-		return json.value("username").string!
+public class ObjectOperations<T: ParseObject>: _Operations<T> {
+	let objectId: String
+	
+	public init(_ objectId: String, operations: [Operation]) {
+		self.objectId = objectId
+		super.init(operations: operations)
 	}
 }
 
@@ -555,7 +546,6 @@ extension _Query: QueryComposer {
 }
 
 extension Operation: QueryComposer {
-	
 	func composeQuery(inout param: [String: AnyObject]) {
 		switch self {
 		case .AddUnique(let key, let args):
@@ -572,10 +562,10 @@ extension Operation: QueryComposer {
 			param[key] = ["__op": "AddRelation", "objects": [pointer.json]]
 		case .RemoveRelation(let key, let pointer):
 			param[key] = ["__op": "RemoveRelation", "objects": [pointer.json]]
-		case .SetSecurity(let user):
+		case .SetSecurity(let objectId):
 			let acl = ACL(rules: [
 				ACLRule(name: "*", write: false, read: true),
-				ACLRule(name: user.objectId, write: true, read: true)])
+				ACLRule(name: objectId, write: true, read: true)])
 			param["ACL"] = acl.json
 		case .DeleteColumn(let key):
 			param[key] = ["__op": "Delete"]
@@ -594,33 +584,35 @@ extension ClassOperations: QueryComposer {
 //MARK: - Shortcut Methods
 
 extension Parse {
-	
-	public func query() -> Query<T> {
-		return Query<T>()
+	public class func operation(objectId: String) -> ObjectOperations<T> {
+		return ObjectOperations<T>(objectId, operations: [])
 	}
 	
-	public class func query(on: T.Type) -> Query<T> {
-		return Query<T>()
-	}
-	
-	public class func operation(objectId: String, operations: Operation...) -> ObjectOperations<T> {
-		return ObjectOperations<T>(objectId, operations: operations)
-	}
-	
-	public class func operation(on: T, operations: Operation...) -> ObjectOperations<T> {
-		let op = ObjectOperations<T>(on.json.objectId, operations: operations)
+	public class func operation(#on: T) -> ObjectOperations<T> {
+		let operations = ObjectOperations<T>(on.json.objectId, operations: [])
 		if let pending = on.json.pending {
 			for (key, value) in pending {
-				if let value = value as? Value {
-					op.set(key, value: value)
+				switch value {
+				case let v as Value:
+					operations.set(key, value: v)
+				case let p as Pointer:
+					operations.set(key, value: p)
+				case let d as Date:
+					operations.set(key, value: d)
+				default:
+					break
 				}
 			}
 		}
-		return op
+		return operations
 	}
 	
-	public class func operation(operations: Operation...) -> ClassOperations<T> {
-		return ClassOperations<T>(operations: operations)
+	public class func operation() -> ClassOperations<T> {
+		return ClassOperations<T>()
+	}
+	
+	public class func get(objectId: String, closure: (T) -> Void) {
+		ObjectCache.get(objectId, closure: closure)
 	}
 }
 
@@ -773,20 +765,21 @@ extension Query {
 	}
 }
 
-extension ClassOperations {
+extension _Operations {
 	public func operation(operation: Operation) -> Self {
 		operations.append(operation)
 		return self
 	}
+	
 	public func set(key: String, value: [AnyObject]) -> Self {
 		return operation(.SetValue(key, AnyWrapper(value)))
 	}
 	
 	public func set(key: String, value: ComparableKeyType) -> Self {
 		if let date = value as? NSDate {
-			return operation(.SetValue(key, Date(date: date)))
+			return set(key, value: Date(date: date))
 		}
-		return operation(.SetValue(key, Value(value)))
+		return set(key, value: Value(value))
 	}
 	
 	public func set<U: ParseObject>(key: String, value: U) -> Self {
@@ -797,16 +790,10 @@ extension ClassOperations {
 		return operation(.SetValue(key, value))
 	}
 	
-	public func setSecurity(readwrite: User) -> Self {
-		return operation(.SetSecurity(readwrite))
-	}
-	
 	public func addRelation<U: ParseObject>(key: String, to: U) -> Self {
 		return operation(.AddRelation(key, Pointer(object: to)))
 	}
-}
-
-extension ObjectOperations {
+	
 	public func addUnique(key: String, object: AnyObject) -> Self {
 		return operation(.AddUnique(key, [object]))
 	}
@@ -939,10 +926,40 @@ func <(lhs: ParseType, rhs: ParseType) -> Bool {
 
 //MARK: - Local Search & Cache
 
+struct ClassCache {
+	var inner: [Data] = []
+	
+	func data(objectId: String) -> Data? {
+		for rec in inner {
+			if rec.objectId == objectId {
+				return rec
+			}
+		}
+		return nil
+	}
+	
+	mutating func appendData(data: Data) {
+		inner.append(data)
+	}
+}
+
 struct LocalPersistence {
-	static var classCache: [String: [Data]] = [:]
-	static var relationCache: [String: [Data]] = [:]
+	static var classCache: [String: ClassCache] = [:]
 	static let local_search_queue = dispatch_queue_create(nil, DISPATCH_QUEUE_CONCURRENT)
+	
+	static func data(pointer: Pointer) -> Data? {
+		if let recs = classCache[pointer.className] {
+			return recs.data(pointer.objectId)
+		}
+		return nil
+	}
+	
+	static func appendData(data: Data, pointer: Pointer) {
+		if classCache[pointer.className] == nil {
+			classCache[pointer.className] = ClassCache()
+		}
+		classCache[pointer.className]?.appendData(data)
+	}
 }
 
 protocol LocalMatch {
@@ -954,10 +971,10 @@ extension Query {
 		if !useLocal || !constraints.allowsLocalSearch() {
 			return false
 		}
-		if let cache = LocalPersistence.classCache[T.className] {
+		if let cache = LocalPersistence.classCache[T.className]?.inner {
 			dispatch_barrier_async(LocalPersistence.local_search_queue) {
 				self.constraints.replaceSubQueries { (key, constraints) in
-					if let innerCache = LocalPersistence.classCache[constraints.className] {
+					if let innerCache = LocalPersistence.classCache[constraints.className]?.inner {
 						return innerCache.filter { constraints.match($0) }.map { $0.value(key) }
 					} else {
 						return []
@@ -1176,7 +1193,7 @@ struct LocalCache<T: ParseObject> {
 		if let cache = self.loadCache() {
 			var results = cache["results"] as [String: AnyObject]
 			results[dom.objectId] = dom.raw
-			LocalPersistence.classCache[T.className]?.append(dom)
+			LocalPersistence.classCache[T.className]?.appendData(dom)
 			let json: [String: AnyObject] = [
 				"time": NSDate.timeIntervalSinceReferenceDate(),
 				"results": results,
@@ -1191,9 +1208,9 @@ struct LocalCache<T: ParseObject> {
 				let cachedTime = NSDate(timeIntervalSinceReferenceDate: time)
 				if cachedTime.timeIntervalSinceNow > -maxAge {
 					if let cache = cache["results"] as? [String: [String: AnyObject]] {
-						let allData = cache.values.array.map({ Data(raw: $0) })
+						let allData = cache.values.array.map({ Data($0) })
 						if allData.count > 0 {
-							LocalPersistence.classCache[T.className] = allData
+							LocalPersistence.classCache[T.className] = ClassCache(inner: allData)
 							println("use local data \(T.className) count=\(allData.count)")
 							done?(allData)
 							return
@@ -1209,11 +1226,11 @@ struct LocalCache<T: ParseObject> {
 		
 		Query<T>().local(false).each(group) { object in
 			cache[object["objectId"] as String] = object
-			jsons.append(Data(raw: object))
+			jsons.append(Data(object))
 		}
 		
 		dispatch_group_notify(group, dispatch_get_main_queue()) {
-			LocalPersistence.classCache[T.className] = jsons
+			LocalPersistence.classCache[T.className] = ClassCache(inner: jsons)
 			println("\(T.className) ready")
 			let json: [String: AnyObject] = [
 				"time": NSDate.timeIntervalSinceReferenceDate(),
@@ -1263,20 +1280,9 @@ public class Relation {
 
 public struct Relations {
 	private static var relations: [String: (dispatch_group_t, Relation)] = [:]
-	public static func of<T: ParseObject>(type: T.Type, key: String, closure: (Relation) -> Void) {
-		if let user = User.currentUser {
-			of(type, key: key, to: user, closure: closure)
-		}
-	}
 	
 	public static func of<T: ParseObject, U: ParseObject>(object: T, key: String, toType: U.Type, closure: (Relation) -> Void) {
 		of(Pointer(object: object), key: key, toClass: U.className, closure: closure)
-	}
-	
-	public static func of<U: ParseObject>(key: String, toType: U.Type, closure: (Relation) -> Void) {
-		if let user = User.currentUser {
-			of(Pointer(object: user), key: key, toClass: U.className, closure: closure)
-		}
 	}
 	
 	public static func of<T: ParseObject, U: ParseObject>(type: T.Type, key: String, to: U, closure: (Relation) -> Void) {
@@ -1344,20 +1350,6 @@ extension ObjectOperations {
 	}
 }
 
-extension User {
-	public func addRelation<U: ParseObject>(key: String, to: U) -> ObjectOperations<User> {
-		return Parse<User>.operation(self.objectId, operations: (.AddRelation(key, Pointer(object: to))))
-	}
-	
-	public func removeRelation<U: ParseObject>(key: String, to: U) -> ObjectOperations<User> {
-		return Parse<User>.operation(self.objectId, operations: (.RemoveRelation(key, Pointer(object: to))))
-	}
-	
-	public func relatedTo<U: ParseObject>(object: U, key: String) -> Query<User> {
-		return Query<User>(constraints: .RelatedTo(key, Pointer(object: object)))
-	}
-}
-
 //MARK: - Dispatch
 
 public struct Client {
@@ -1380,7 +1372,7 @@ public struct Client {
 		}
 		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) {
 			var request = self.manager!.request(method, pathString, parameters: parameters, encoding: encoding)
-			println("\(request.cURLRepresentation())")
+			//			println("\(request.cURLRepresentation())")
 			request.responseJSON { (req, res, json, error) in
 				if let object = json as? [String: AnyObject] {
 					if object["error"] != nil && object["code"] != nil {
@@ -1469,7 +1461,7 @@ extension ClassOperations {
 				var object = param
 				object["createdAt"] = json["createdAt"]
 				object["objectId"] = json["objectId"]
-				let data = Data(raw: object)
+				let data = Data(object)
 				LocalCache<T>.append(data)
 				closure(T(json: data), nil)
 			}
@@ -1505,87 +1497,7 @@ public func parseFunction(name: String, parameters: [String: AnyObject], done: (
 	Client.request(.POST, "/functions/\(name)", parameters, done)
 }
 
-extension User {
-	public static var currentUser: User? {
-		if let object = NSUserDefaults.standardUserDefaults().objectForKey("user") as? [String: AnyObject] {
-			let user = User(json: Data(raw: object))
-			return user
-		}
-		return nil
-	}
-	
-	public static func currentUser(block: (User?, NSError?) -> Void) {
-		if let user = currentUser {
-			println("user\(user.json.raw)")
-			if let token = user.json.value("sessionToken").string {
-				block(user, nil)
-				println("returned user may not be valid server side")
-				Client.loginSession(token) { error in
-					if let error = error {
-						println("session login failed \(user.username) \(error)")
-						block(user, error)
-					}
-				}
-				return
-			}
-		}
-		block(nil, nil)
-	}
-	
-	public static func logIn(username: String, password: String, callback: (User?, NSError?) -> Void) {
-		Client.updateSession(nil)
-		Client.request(.GET, "/login", ["username": username, "password": password]) { (json, error) in
-			if let error = error {
-				return callback(nil, error)
-			}
-			if let json = json {
-				let user = User(json: Data(raw: json))
-				if let token = user.json.value("sessionToken").string {
-					NSUserDefaults.standardUserDefaults().setObject(json, forKey: "user")
-					NSUserDefaults.standardUserDefaults().synchronize()
-					Client.updateSession(token)
-					println("logIn user \(json)")
-					callback(user, nil)
-				} else {
-					callback(nil, NSError(domain: ParseErrorDomain, code: 206, userInfo: [NSLocalizedDescriptionKey: "Failed to establish session"]))
-				}
-			}
-		}
-	}
-	
-	public static func logOut() {
-		NSUserDefaults.standardUserDefaults().removeObjectForKey("user")
-		NSUserDefaults.standardUserDefaults().synchronize()
-		Client.updateSession(nil)
-	}
-	
-	public static func signUp(username: String, password: String, extraInfo: [String: ComparableKeyType]? = nil, callback: (User?, NSError?) -> Void) {
-		Client.updateSession(nil)
-		let op = Parse<User>.operation().set("username", value: username).set("password", value: password)
-		if let info = extraInfo {
-			for (k, v) in info {
-				op.set(k, value: v)
-			}
-		}
-		op.save { (user, error) -> Void in
-			if error != nil {
-				println("error \(error)")
-				return callback(nil, error)
-			}
-			if let user = user {
-				if let token = user.json.value("sessionToken").string {
-					NSUserDefaults.standardUserDefaults().setObject(user.json.raw, forKey: "user")
-					NSUserDefaults.standardUserDefaults().synchronize()
-					Client.updateSession(token)
-					println("signUp user \(user)")
-					callback(user, error)
-				} else {
-					self.logIn(username, password: password, callback: callback)
-				}
-			}
-		}
-	}
-}
+
 
 extension Parse {
 	public func persistent(maxAge: NSTimeInterval, done: ([Data] -> Void)? = nil) -> Self {
@@ -1631,7 +1543,7 @@ extension Data: DictionaryLiteralConvertible {
 		for (key_, value) in elements {
 			dictionary_[key_] = value
 		}
-		self.init(raw: dictionary_)
+		self.init(dictionary_)
 	}
 }
 
@@ -1682,67 +1594,59 @@ extension Constraints: Printable {
 	}
 }
 
-//MARK: Push
+//MARK: Cache
 
-public struct Installation: ParseObject {
-	public static var className: String { return "_Installation" }
-	public var json: Data
-	public init(json: Data) {
-		self.json = json
-	}
-}
-
-public struct Push {
-	public var json: Data
-	public init(json: Data) {
-		self.json = json
-	}
-}
-
-extension NSData {
-	public var hexadecimalString: NSString {
-		var bytes = [UInt8](count: length, repeatedValue: 0)
-		getBytes(&bytes, length: length)
-		
-		let hexString = NSMutableString()
-		for byte in bytes {
-			hexString.appendFormat("%02x", UInt(byte))
-		}
-		
-		return NSString(string: hexString)
-	}
-}
-
-extension Installation {
-	static var currentInstallation: Installation?
+public struct ObjectCache {
+	static var timers: [String: (dispatch_source_t, [(objectId: String, closure: Data -> Void)])] = [:]
 	
-	public static func register(deviceToken: NSData, channels: [String], otherInfo: ((ClassOperations<Installation>) -> Void)? = nil) {
-		let op = Parse<Installation>.operation()
-			.set("deviceType", value: "ios")
-			.set("deviceToken", value: deviceToken.hexadecimalString)
-			.set("channels", value: channels)
-		otherInfo?(op)
-		op.save { (installation, error) in
-			if let installation = installation {
-				self.currentInstallation = installation
-				println("current installation \(installation.json.raw)")
+	static func timer(key: String) -> dispatch_source_t {
+		if let timer = timers[key] {
+			return timer.0
+		}
+		let timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue())
+		dispatch_resume(timer)
+		timers[key] = (timer, [])
+		return timer
+	}
+	
+	static func retrivePending<T: ParseObject>(type: T.Type) -> [(objectId: String, closure: Data -> Void)] {
+		if var (timer, pending) = timers[T.className] {
+			let checkouts = pending
+			timers[T.className] = (timer, [])
+			return checkouts
+		}
+		return []
+	}
+	
+	static func appendClosure<T: ParseObject>(objectId: String, closure: (T) -> Void) {
+		if var (timer, pending) = timers[T.className] {
+			pending.append(objectId: objectId, closure: { closure(T(json: $0)) })
+			timers[T.className] = (timer, pending)
+		}
+	}
+	
+	public static func get<T: ParseObject>(objectId: String, closure: (T) -> Void, rush: Double = 0.25) {
+		if let object = LocalPersistence.data(Pointer(className: T.className, objectId: objectId)) {
+			return closure(T(json: object))
+		} else {
+			let t = timer(T.className)
+			appendClosure(objectId, closure: closure)
+			dispatch_source_set_timer(t, dispatch_time(DISPATCH_TIME_NOW, Int64(rush * Double(NSEC_PER_SEC))), DISPATCH_TIME_FOREVER, 0)
+			dispatch_source_set_event_handler(t) {
+				let checkouts = self.retrivePending(T.self)
+				let objectIds = checkouts.map { Value($0.objectId) }
+				_Query(className: T.className, constraints: .In("objectId", objectIds)).list { (jsons, error) in
+					for (objectId, closure) in checkouts {
+						for json in jsons {
+							if json.objectId == objectId {
+								LocalPersistence.appendData(json, pointer: Pointer(className: T.className, objectId: objectId))
+								closure(json)
+								break
+							}
+						}
+					}
+				}
 			}
 		}
-	}
-	
-	public static func clearBadge() {
-		if var installation = Installation.currentInstallation {
-			installation.json["badge"] = Value(0)
-			Parse<Installation>.operation(installation).update { _ in }
-		}
-	}
-}
-
-extension Push {
-	public static func send(data: [String: AnyObject], query: Query<Installation>) {
-		var _where: [String: AnyObject] = [:]
-		query.composeQuery(&_where)
-		println("push where = \(_where)")
-		Client.request(.POST, "/push", ["where": _where, "data": data]) { _ in }
 	}
 }
