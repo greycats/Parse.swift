@@ -17,7 +17,7 @@ public protocol ParseType {
 public protocol ParseObject {
 	init(json: Data)
 	var json: Data { get }
-	class var className: String { get }
+	static var className: String { get }
 }
 
 public class Parse<T: ParseObject> {
@@ -311,6 +311,7 @@ extension Pointer: _ParseType {
 		if json["__type"] == "Pointer" {
 			self.className = json["className"]! as String
 			self.objectId = json["objectId"]! as String
+			self.connections = nil
 			return
 		}
 		return nil
@@ -351,8 +352,8 @@ extension GeoPoint: _ParseType {
 	init?(_ json: RawValue) {
 		if let type = json["__type"] as? String {
 			if type == "GeoPoint" {
-				self.latitude = json["latitude"]! as Double
-				self.longitude = json["longitude"]! as Double
+				self.latitude = json["latitude"]! as! Double
+				self.longitude = json["longitude"]! as! Double
 				return
 			}
 		}
@@ -421,7 +422,7 @@ extension Value: _ParseType {
 	}
 	
 	var double: Double {
-		return object as Double
+		return object as! Double
 	}
 	
 	var string: String? {
@@ -429,7 +430,7 @@ extension Value: _ParseType {
 	}
 	
 	var bool: Bool {
-		return object as Bool
+		return object as! Bool
 	}
 	
 	public var json: AnyObject {
@@ -635,7 +636,7 @@ extension _Query {
 	
 	public func whereKey<U: ParseType>(key: String, equalTo object: U) -> Self {
 		if key == "objectId" && object is Pointer {
-			return constraint(.EqualTo(key, Value((object as Pointer).objectId)))
+			return constraint(.EqualTo(key, Value((object as! Pointer).objectId)))
 		} else {
 			return constraint(.EqualTo(key, object))
 		}
@@ -684,6 +685,11 @@ extension _Query {
 	}
 	
 	public func whereKey(key: String, containedIn: [String]) -> Self {
+		let values = containedIn.map({ Value($0) })
+		return constraint(.In(key, values))
+	}
+	
+	public func whereKey(key: String, containedIn: [Int]) -> Self {
 		let values = containedIn.map({ Value($0) })
 		return constraint(.In(key, values))
 	}
@@ -834,9 +840,9 @@ extension Value: Comparable {}
 public func ==(lhs: Value, rhs: Value) -> Bool {
 	switch (lhs.type, rhs.type) {
 	case (.Number, .Number):
-		return (lhs.object as Double) == (rhs.object as Double)
+		return (lhs.object as! Double) == (rhs.object as! Double)
 	case (.String, .String):
-		return (lhs.object as String) == (rhs.object as String)
+		return (lhs.object as! String) == (rhs.object as! String)
 	case (.Null, .Null):
 		return true
 	default:
@@ -847,9 +853,9 @@ public func ==(lhs: Value, rhs: Value) -> Bool {
 public func <(lhs: Value, rhs: Value) -> Bool {
 	switch (lhs.type, rhs.type) {
 	case (.Number, .Number):
-		return (lhs.object as Double) < (rhs.object as Double)
+		return (lhs.object as! Double) < (rhs.object as! Double)
 	case (.String, .String):
-		return (lhs.object as String) < (rhs.object as String)
+		return (lhs.object as! String) < (rhs.object as! String)
 	case (.Null, .Null):
 		return true
 	default:
@@ -939,7 +945,26 @@ struct ClassCache {
 	}
 	
 	mutating func appendData(data: Data) {
-		inner.append(data)
+		var appended = false
+		for i in 0..<inner.count {
+			if inner[i].objectId == data.objectId {
+				inner[i] = data
+				appended = true
+			}
+		}
+		if !appended {
+			inner.append(data)
+		}
+	}
+	
+	mutating func removeData(data: Data) {
+		var toRemove:[Int] = []
+		for i in 0..<inner.count {
+			if inner[i].objectId == data.objectId {
+				toRemove.append(i)
+			}
+		}
+		toRemove.map { self.inner.removeAtIndex($0) }
 	}
 }
 
@@ -1060,7 +1085,7 @@ extension Constraint: LocalMatch {
 			return json[key] < right
 		case .MatchRegex(let key, let regexp):
 			let string = json.value(key).string!
-			return regexp.firstMatchInString(string, options: nil, range: NSMakeRange(0, countElements(string))) != nil
+			return regexp.firstMatchInString(string, options: nil, range: NSMakeRange(0, count(string))) != nil
 		case .In(let key, let keys):
 			return contains(keys, json.value(key))
 		case .NotIn(let key, let keys):
@@ -1191,9 +1216,22 @@ struct LocalCache<T: ParseObject> {
 	
 	static func append(dom: Data) {
 		if let cache = self.loadCache() {
-			var results = cache["results"] as [String: AnyObject]
+			var results = cache["results"] as! [String: AnyObject]
 			results[dom.objectId] = dom.raw
 			LocalPersistence.classCache[T.className]?.appendData(dom)
+			let json: [String: AnyObject] = [
+				"time": NSDate.timeIntervalSinceReferenceDate(),
+				"results": results,
+				"class": T.className]
+			self.writeCache(json)
+		}
+	}
+	
+	static func remove(dom: Data) {
+		if let cache = self.loadCache() {
+			var results = cache["results"] as! [String: AnyObject]
+			results.removeValueForKey(dom.objectId)
+			LocalPersistence.classCache[T.className]?.removeData(dom)
 			let json: [String: AnyObject] = [
 				"time": NSDate.timeIntervalSinceReferenceDate(),
 				"results": results,
@@ -1225,7 +1263,7 @@ struct LocalCache<T: ParseObject> {
 		println("start caching all \(T.className)")
 		
 		Query<T>().local(false).each(group) { object in
-			cache[object["objectId"] as String] = object
+			cache[object["objectId"] as! String] = object
 			jsons.append(Data(object))
 		}
 		
@@ -1352,8 +1390,12 @@ extension ObjectOperations {
 
 //MARK: - Dispatch
 
+var clientCreated = false
+
 public struct Client {
 	static var manager_init_group: dispatch_group_t = {
+		clientCreated = true
+		
 		var group = dispatch_group_create()
 		dispatch_group_enter(group)
 		return group
@@ -1372,11 +1414,10 @@ public struct Client {
 		}
 		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) {
 			var request = self.manager!.request(method, pathString, parameters: parameters, encoding: encoding)
-			//			println("\(request.cURLRepresentation())")
 			request.responseJSON { (req, res, json, error) in
 				if let object = json as? [String: AnyObject] {
 					if object["error"] != nil && object["code"] != nil {
-						closure(nil, NSError(domain: ParseErrorDomain, code: object["code"] as Int, userInfo: [NSLocalizedDescriptionKey: object["error"] as String]))
+						closure(nil, NSError(domain: ParseErrorDomain, code: object["code"] as! Int, userInfo: [NSLocalizedDescriptionKey: object["error"] as! String]))
 						return
 					}
 					closure(object, error)
@@ -1388,10 +1429,28 @@ public struct Client {
 		}
 	}
 	
+	static func request(method: Method, _ path: String, _ data: NSData, _ closure: ([String: AnyObject]?, NSError?) -> Void) {
+		var pathString = "https://api.parse.com/1\(path)"
+		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) { () -> Void in
+			var request = self.manager!.upload(method, pathString, data: data)
+			request.responseJSON(options: nil) { (req, res, json, error) in
+				if let object = json as? [String: AnyObject] {
+					if object["error"] != nil && object["code"] != nil {
+						closure(nil, NSError(domain: ParseErrorDomain, code: object["code"] as! Int, userInfo: [NSLocalizedDescriptionKey: object["error"] as! String]))
+						return
+					}
+					closure(object, error)
+				} else {
+					closure(nil, error)
+				}
+			}
+		}
+	}
+	
 	static func updateSession(token: String?) {
 		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) {
 			if var headers = self.manager!.session.configuration.HTTPAdditionalHeaders {
-				headers["X-Parse-Session-Token"] =  token
+				headers["X-Parse-Session-Token"] = token
 				self.manager!.session.configuration.HTTPAdditionalHeaders = headers
 			}
 		}
@@ -1414,7 +1473,13 @@ public struct Client {
 		} else if let masterKey = masterKey {
 			headers["X-Parse-Master-Key"] = masterKey
 		}
-		if let object = NSUserDefaults.standardUserDefaults().objectForKey("user") as? [String: AnyObject] {
+		var userDefaults: NSUserDefaults
+		#if TARGET_IS_EXTENSION
+			userDefaults = NSUserDefaults(suiteName: APPGROUP_USER)!
+		#else
+			userDefaults = NSUserDefaults.standardUserDefaults()
+		#endif
+		if let object = userDefaults.objectForKey("user") as? [String: AnyObject] {
 			if let token = object["sessionToken"] as? String {
 				headers["X-Parse-Session-Token"] = token
 			}
@@ -1625,7 +1690,7 @@ public struct ObjectCache {
 		}
 	}
 	
-	public static func get<T: ParseObject>(objectId: String, closure: (T) -> Void, rush: Double = 0.25) {
+	public static func get<T: ParseObject>(objectId: String, rush: Double = 0.25, closure: (T) -> Void) {
 		if let object = LocalPersistence.data(Pointer(className: T.className, objectId: objectId)) {
 			return closure(T(json: object))
 		} else {

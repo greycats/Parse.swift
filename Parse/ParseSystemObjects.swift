@@ -30,7 +30,13 @@ public struct Installation: ParseObject {
 
 extension User {
 	public static var currentUser: User? {
-		if let object = NSUserDefaults.standardUserDefaults().objectForKey("user") as? [String: AnyObject] {
+		var userDefaults: NSUserDefaults
+		#if TARGET_IS_EXTENSION
+			userDefaults = NSUserDefaults(suiteName: APPGROUP_USER)!
+		#else
+			userDefaults = NSUserDefaults.standardUserDefaults()
+		#endif
+		if let object = userDefaults.objectForKey("user") as? [String: AnyObject] {
 			let user = User(json: Data(object))
 			return user
 		}
@@ -65,6 +71,8 @@ extension User {
 				if let token = user.json.value("sessionToken").string {
 					NSUserDefaults.standardUserDefaults().setObject(json, forKey: "user")
 					NSUserDefaults.standardUserDefaults().synchronize()
+					let defaults = NSUserDefaults(suiteName: APPGROUP_USER)
+					defaults?.setObject(json, forKey: "user")
 					Client.updateSession(token)
 					println("logIn user \(json)")
 					dispatch_async(dispatch_get_main_queue()) {
@@ -78,6 +86,8 @@ extension User {
 	}
 	
 	public static func logOut() {
+		let defaults = NSUserDefaults(suiteName: APPGROUP_USER)
+		defaults?.removeObjectForKey("user")
 		NSUserDefaults.standardUserDefaults().removeObjectForKey("user")
 		NSUserDefaults.standardUserDefaults().synchronize()
 		Client.updateSession(nil)
@@ -99,6 +109,8 @@ extension User {
 			if let user = user {
 				if let token = user.json.value("sessionToken").string {
 					NSUserDefaults.standardUserDefaults().setObject(user.json.raw, forKey: "user")
+					let defaults = NSUserDefaults(suiteName: APPGROUP_USER)
+					defaults?.setObject(user.json.raw, forKey: "user")
 					NSUserDefaults.standardUserDefaults().synchronize()
 					Client.updateSession(token)
 					println("signUp user \(user)")
@@ -106,6 +118,17 @@ extension User {
 				} else {
 					self.logIn(username, password: password, callback: callback)
 				}
+			}
+		}
+	}
+	
+	public static func uploadImage(data: NSData, callback: (String?, NSError?) -> Void) {
+		Client.request(.POST, "/files/pic.jpg", data) { (json, error) -> Void in
+			if let error = error {
+				return callback(nil, error)
+			}
+			if let json = json {
+				callback(json["url"] as? String, error)
 			}
 		}
 	}
@@ -125,6 +148,7 @@ extension Relations {
 }
 
 extension User {
+	
 	public func addRelation<U: ParseObject>(key: String, to: U) -> ObjectOperations<User> {
 		return Parse<User>.operation(objectId).addRelation(key, to: to)
 	}
