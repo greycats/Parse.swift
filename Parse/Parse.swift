@@ -41,6 +41,16 @@ public struct Bytes {
 	public let bytes: NSData
 }
 
+public struct File {
+	public let fileName: String
+	public let urlString: String
+	
+	public init(fileName: String) {
+		self.fileName = fileName
+		self.urlString = ""
+	}
+}
+
 public struct Pointer {
 	public let className: String
 	public let objectId: String
@@ -304,6 +314,23 @@ extension Bytes: _ParseType {
 	}
 }
 
+extension File: _ParseType {
+	public typealias RawValue = [String: String]
+	
+	init?(_ json: RawValue) {
+		if json["__type"] == "File" {
+			self.fileName = json["name"]! as String
+			self.urlString = json["url"]! as String
+			return
+		}
+		return nil
+	}
+	
+	public var json : AnyObject {
+		return ["__type": "File", "name": fileName]
+	}
+}
+
 extension Pointer: _ParseType {
 	public typealias RawValue = [String: String]
 	
@@ -454,6 +481,10 @@ extension Data {
 		return check(raw[key], Pointer.self)
 	}
 	
+	public func file(key: String) -> File? {
+		return check(raw[key], File.self)
+	}
+
 	public var keys: [String] {
 		return raw.keys.array
 	}
@@ -600,6 +631,8 @@ extension Parse {
 					operations.set(key, value: p)
 				case let d as Date:
 					operations.set(key, value: d)
+				case let f as File:
+					operations.set(key, value: f)
 				default:
 					break
 				}
@@ -615,6 +648,7 @@ extension Parse {
 	public class func get(objectId: String, closure: (T) -> Void) {
 		ObjectCache.get(objectId, closure: closure)
 	}
+	
 }
 
 @objc public protocol ComparableKeyType: NSObjectProtocol {}
@@ -1476,7 +1510,7 @@ public struct Client {
 		var userDefaults: NSUserDefaults
 		#if TARGET_IS_EXTENSION
 			userDefaults = NSUserDefaults(suiteName: APPGROUP_USER)!
-		#else
+			#else
 			userDefaults = NSUserDefaults.standardUserDefaults()
 		#endif
 		if let object = userDefaults.objectForKey("user") as? [String: AnyObject] {
@@ -1492,6 +1526,18 @@ public struct Client {
 	public static func trackAppOpen() {
 		request(.POST, "/events/AppOpened", [:]) { (json, error) in
 			println("trackAppOpen error = \(error)")
+		}
+	}
+	
+	public static func uploadImage(data: NSData, fileName: String, callback: (String?, NSError?) -> Void) {
+		let name = "/files/\(fileName).jpg"
+		Client.request(.POST, name, data) { (json, error) -> Void in
+			if let error = error {
+				return callback(nil, error)
+			}
+			if let json = json {
+				callback(json["url"] as? String, error)
+			}
 		}
 	}
 }

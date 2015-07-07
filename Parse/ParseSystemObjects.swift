@@ -6,6 +6,8 @@
 //  Copyright (c) 2015 Rex Sheng. All rights reserved.
 //
 
+let APPGROUP_USER = "AppGroupUser"
+
 public struct User: ParseObject {
 	public static var className: String { return "_User" }
 	public var json: Data
@@ -33,7 +35,7 @@ extension User {
 		var userDefaults: NSUserDefaults
 		#if TARGET_IS_EXTENSION
 			userDefaults = NSUserDefaults(suiteName: APPGROUP_USER)!
-		#else
+			#else
 			userDefaults = NSUserDefaults.standardUserDefaults()
 		#endif
 		if let object = userDefaults.objectForKey("user") as? [String: AnyObject] {
