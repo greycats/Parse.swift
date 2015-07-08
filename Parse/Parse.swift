@@ -476,19 +476,19 @@ extension Value: _ParseType {
 		}
 	}
 	
-	var int: Int? {
+	public var int: Int? {
 		return object as? Int
 	}
 	
-	var double: Double {
+	public var double: Double {
 		return object as! Double
 	}
 	
-	var string: String? {
+	public var string: String? {
 		return object as? String
 	}
 	
-	var bool: Bool {
+	public var bool: Bool {
 		return object as! Bool
 	}
 	
