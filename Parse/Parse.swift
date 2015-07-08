@@ -54,8 +54,6 @@ public struct File {
 		self.fileName = fileName
 		self.urlString = urlString
 	}
-	
-	
 }
 
 public struct Pointer {
@@ -73,6 +71,11 @@ public struct Pointer {
 public struct GeoPoint {
 	public let latitude: Double
 	public let longitude: Double
+	
+	public init(latitude: Double, longitude: Double) {
+		self.latitude = latitude
+		self.longitude = longitude
+	}
 }
 
 public struct ACLRule {
