@@ -361,6 +361,17 @@ extension File: _ParseType {
 			callback(nil, localError)
 		}
 	}
+	
+	public func downloadImage(completion: (NSData?, NSError?) -> Void) {
+		Alamofire.request(.GET, self.urlString).response { (_ , _ , data, error) in
+			if let imageData = data as? NSData {
+				completion(imageData, nil)
+			}
+			if let error = error {
+				completion(nil, error)
+			}
+		}
+	}
 }
 
 extension Pointer: _ParseType {
