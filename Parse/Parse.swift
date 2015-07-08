@@ -49,6 +49,13 @@ public struct File {
 		self.fileName = fileName
 		self.urlString = ""
 	}
+	
+	public init(urlString: String, fileName: String) {
+		self.fileName = fileName
+		self.urlString = urlString
+	}
+	
+	
 }
 
 public struct Pointer {
@@ -328,6 +335,28 @@ extension File: _ParseType {
 	
 	public var json : AnyObject {
 		return ["__type": "File", "name": fileName]
+	}
+	
+	public static func uploadImage(data: NSData, fileName: String, callback: (File?, NSError?) -> Void) {
+		let name = "/files/\(fileName)"
+		Client.request(.POST, name, data) { (json, error) -> Void in
+			if let error = error {
+				callback(nil, error)
+				
+				return
+			}
+			if let json = json, url = json["url"] as? String {
+				let filename = url.lastPathComponent
+				
+				let file = File(urlString: url, fileName: filename)
+					
+				callback(file, error)
+			
+				return
+			}
+			let localError = NSError(domain: ParseErrorDomain, code: 500, userInfo: [NSLocalizedDescriptionKey:"Did not receive url from Parse server."])
+			callback(nil, localError)
+		}
 	}
 }
 
@@ -1529,17 +1558,6 @@ public struct Client {
 		}
 	}
 	
-	public static func uploadImage(data: NSData, fileName: String, callback: (String?, NSError?) -> Void) {
-		let name = "/files/\(fileName).jpg"
-		Client.request(.POST, name, data) { (json, error) -> Void in
-			if let error = error {
-				return callback(nil, error)
-			}
-			if let json = json {
-				callback(json["url"] as? String, error)
-			}
-		}
-	}
 }
 
 func path(className: String, objectId: String? = nil) -> String {
