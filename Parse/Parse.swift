@@ -24,12 +24,12 @@ public class Parse<T: ParseObject> {
 }
 
 public struct Value {
-	enum Type {
+	public enum Type {
 		case Number
 		case String
 		case Null
 	}
-	let type: Type
+	public let type: Type
 	public let object: RawValue
 }
 
@@ -364,7 +364,7 @@ extension File: _ParseType {
 	
 	public func downloadImage(completion: (NSData?, NSError?) -> Void) {
 		Alamofire.request(.GET, self.urlString).response { (_ , _ , data, error) in
-			if let imageData = data as? NSData {
+			if let imageData = data {
 				completion(imageData, nil)
 			}
 			if let error = error {
