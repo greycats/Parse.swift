@@ -27,6 +27,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		6C1787C31B904788006A642A /* SwiftyParse.podspec */ = {isa = PBXFileReference; lastKnownFileType = text; path = SwiftyParse.podspec; sourceTree = "<group>"; };
 		CF1D342B1A837BD500CF3776 /* Parse.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Parse.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF1D342F1A837BD500CF3776 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		CF1D34301A837BD500CF3776 /* Parse.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Parse.h; sourceTree = "<group>"; };
@@ -92,6 +93,7 @@
 		CF1D342E1A837BD500CF3776 /* Supporting Files */ = {
 			isa = PBXGroup;
 			children = (
+				6C1787C31B904788006A642A /* SwiftyParse.podspec */,
 				CF1D342F1A837BD500CF3776 /* Info.plist */,
 			);
 			name = "Supporting Files";
