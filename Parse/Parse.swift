@@ -108,6 +108,9 @@ public enum Constraint {
 	case In(String, [Value])
 	case NotIn(String, [Value])
 	case RelatedTo(String, Pointer)
+	
+	// GeoPoint
+	case NearPoint(String, GeoPoint, Double)
 }
 
 public enum Operation {
@@ -352,9 +355,9 @@ extension File: _ParseType {
 				let filename = url.lastPathComponent
 				
 				let file = File(urlString: url, fileName: filename)
-					
+				
 				callback(file, error)
-			
+				
 				return
 			}
 			let localError = NSError(domain: ParseErrorDomain, code: 500, userInfo: [NSLocalizedDescriptionKey:"Did not receive url from Parse server."])
@@ -527,7 +530,7 @@ extension Data {
 	public func file(key: String) -> File? {
 		return check(raw[key], File.self)
 	}
-
+	
 	public var keys: [String] {
 		return raw.keys.array
 	}
@@ -602,6 +605,10 @@ extension Constraint: QueryComposer {
 			param["$relatedTo"] = ["object": object.json, "key": key]
 		case .Exists(let key, let exists):
 			param[key] = ["$exists": exists]
+			
+			// GeoPoint
+		case .NearPoint(let key, let nearPoint, let withinKm):
+			param[key] = ["$nearSphere": ["__type": "GeoPoint", "latitude": nearPoint.latitude, "longitude": nearPoint.longitude], "$maxDistanceInKilometers": withinKm]
 		}
 	}
 }
@@ -794,6 +801,10 @@ extension _Query {
 	
 	public func whereKey(key: String, exists: Bool) -> Self {
 		return constraint(.Exists(key, exists))
+	}
+	
+	public func whereKey(key: String, nearPoint: GeoPoint, withinKm: Double) -> Self {
+		return constraint(.NearPoint(key, nearPoint, withinKm))
 	}
 	
 	public func relatedTo<U: ParseObject>(object: U, key: String) -> Self {
@@ -1727,6 +1738,8 @@ extension Constraint: Printable {
 			return "related to \(object) under key \(key)"
 		case .Exists(let key, let exists):
 			return "\(key) exists = \(exists)"
+		case .NearPoint(let key, let nearPoint, let withinKm) :
+			return "\(key) within \(withinKm) from \(nearPoint)"
 		}
 	}
 }
