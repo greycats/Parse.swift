@@ -608,7 +608,7 @@ extension Constraint: QueryComposer {
 			
 			// GeoPoint
 		case .NearPoint(let key, let nearPoint, let withinKm):
-			param[key] = ["$nearSphere": ["__type": "GeoPoint", "latitude": nearPoint.latitude, "longitude": nearPoint.longitude], "$maxDistanceInKilometers": withinKm]
+			param[key] = ["$nearSphere": nearPoint.json, "$maxDistanceInKilometers": withinKm]
 		}
 	}
 }
