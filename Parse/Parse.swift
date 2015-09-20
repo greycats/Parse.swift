@@ -23,7 +23,7 @@ public protocol ParseObject {
 public class Parse<T: ParseObject> {
 }
 
-public struct Value {
+public struct Valuee {
 	public enum Type {
 		case Number
 		case String
@@ -105,8 +105,8 @@ public enum Constraint {
 	case DoNotMatchQuery(key: String, dontMatchKey: String, inQuery: Constraints)
 	case MatchRegex(String, NSRegularExpression)
 	case Or(Constraints, Constraints)
-	case In(String, [Value])
-	case NotIn(String, [Value])
+	case In(String, [Valuee])
+	case NotIn(String, [Valuee])
 	case RelatedTo(String, Pointer)
 	
 	// GeoPoint
@@ -153,7 +153,7 @@ public class _Query {
 	
 	init(className: String, constraints: Constraint...) {
 		self.constraints = Constraints(className: className)
-		self.constraints.inner.extend(constraints)
+		self.constraints.inner.appendContentsOf(constraints)
 	}
 	
 	func getRaw(closure: ([String: AnyObject]?, NSError?) -> Void) {
@@ -161,7 +161,7 @@ public class _Query {
 		var _where: [String: AnyObject] = [:]
 		self.composeQuery(&_where)
 		if _where.count > 0 {
-			if let data = NSJSONSerialization.dataWithJSONObject(_where, options: nil, error: nil) {
+			if let data = try? NSJSONSerialization.dataWithJSONObject(_where, options: []) {
 				parameters["where"] = NSString(data: data, encoding: NSUTF8StringEncoding)
 			}
 		}
@@ -184,7 +184,7 @@ public class _Query {
 			parameters["count"] = 1
 		}
 		let _path = path(constraints.className)
-		println("sending \(parameters) to \(_path)")
+		print("sending \(parameters) to \(_path)")
 		Client.request(.GET, _path, parameters, closure)
 	}
 	
@@ -221,7 +221,7 @@ public class Query<T: ParseObject>: _Query {
 	
 	public init(constraints: Constraint...) {
 		super.init(className: T.className)
-		self.constraints.inner.extend(constraints)
+		self.constraints.inner.appendContentsOf(constraints)
 	}
 	
 	override func getRaw(closure: ([String : AnyObject]?, NSError?) -> Void) {
@@ -282,7 +282,7 @@ extension Date: _ParseType {
 	typealias RawValue = [String: String]
 	
 	private static func formatter() -> NSDateFormatter {
-		var dict = NSThread.currentThread().threadDictionary
+		let dict = NSThread.currentThread().threadDictionary
 		if let iso = dict["iso"] as? NSDateFormatter {
 			return iso
 		} else {
@@ -316,14 +316,14 @@ extension Bytes: _ParseType {
 	
 	init?(_ json: RawValue) {
 		if json["__type"] == "Bytes" {
-			bytes = NSData(base64EncodedString: json["base64"]!, options: .allZeros)!
+			bytes = NSData(base64EncodedString: json["base64"]!, options: [])!
 			return
 		}
 		return nil
 	}
 	
 	public var json: AnyObject {
-		return ["__type": "Bytes", "base64": bytes.base64EncodedStringWithOptions(.allZeros)]
+		return ["__type": "Bytes", "base64": bytes.base64EncodedStringWithOptions([])]
 	}
 }
 
@@ -351,10 +351,10 @@ extension File: _ParseType {
 				
 				return
 			}
-			if let json = json, url = json["url"] as? String {
+			if let json = json, url = NSURL(string: (json["url"] as? String)!) {
 				let filename = url.lastPathComponent
 				
-				let file = File(urlString: url, fileName: filename)
+				let file = File(urlString: url.absoluteString, fileName: filename!)
 				
 				callback(file, error)
 				
@@ -365,7 +365,7 @@ extension File: _ParseType {
 		}
 	}
 	
-	public func downloadImage(completion: (NSData?, NSError?) -> Void) {
+	public func downloadImage(completion: (NSData?, ErrorType?) -> Void) {
 		Alamofire.request(.GET, self.urlString).response { (_ , _ , data, error) in
 			if let imageData = data {
 				completion(imageData, nil)
@@ -473,15 +473,15 @@ extension ACL: _ParseType {
 	}
 }
 
-extension Value: _ParseType {
+extension Valuee: _ParseType {
 	public typealias RawValue = AnyObject?
 	
 	init(_ json: RawValue) {
 		switch json {
-		case let string as String:
+		case _ as String:
 			type = .String
 			object = json
-		case let number as Double:
+		case _ as Double:
 			type = .Number
 			object = json
 		default:
@@ -532,7 +532,7 @@ extension Data {
 	}
 	
 	public var keys: [String] {
-		return raw.keys.array
+		return Array(raw.keys)
 	}
 	
 	public func date(key: String) -> Date? {
@@ -555,8 +555,8 @@ extension Data {
 		return check(raw[key], GeoPoint.self)
 	}
 	
-	public func value(key: String) -> Value {
-		return Value(raw[key])
+	public func value(key: String) -> Valuee {
+		return Valuee(raw[key])
 	}
 	
 	public var security: ACL? {
@@ -591,7 +591,7 @@ extension Constraint: QueryComposer {
 			param[key] = ["$dontSelect": ["key": dontMatchKey, "query": ["className": inQuery.className, "where": _composeQuery(inQuery)]]]
 		case .MatchRegex(let key, let match):
 			var options = ""
-			if match.options & .CaseInsensitive == .CaseInsensitive {
+			if match.options.intersect(.CaseInsensitive) == .CaseInsensitive {
 				options += "i"
 			}
 			param[key] = ["$regex": match.pattern, "$options": options]
@@ -670,12 +670,12 @@ extension Parse {
 		return ObjectOperations<T>(objectId, operations: [])
 	}
 	
-	public class func operation(#on: T) -> ObjectOperations<T> {
+	public class func operation(on on: T) -> ObjectOperations<T> {
 		let operations = ObjectOperations<T>(on.json.objectId, operations: [])
 		if let pending = on.json.pending {
 			for (key, value) in pending {
 				switch value {
-				case let v as Value:
+				case let v as Valuee:
 					operations.set(key, value: v)
 				case let p as Pointer:
 					operations.set(key, value: p)
@@ -720,7 +720,7 @@ extension _Query {
 	
 	public func whereKey<U: ParseType>(key: String, equalTo object: U) -> Self {
 		if key == "objectId" && object is Pointer {
-			return constraint(.EqualTo(key, Value((object as! Pointer).objectId)))
+			return constraint(.EqualTo(key, Valuee((object as! Pointer).objectId)))
 		} else {
 			return constraint(.EqualTo(key, object))
 		}
@@ -730,13 +730,13 @@ extension _Query {
 		if let date = object as? NSDate {
 			return constraint(.EqualTo(key, Date(date: date)))
 		}
-		return constraint(.EqualTo(key, Value(object)))
+		return constraint(.EqualTo(key, Valuee(object)))
 	}
 	
 	public func whereKey<U: ParseObject>(key: String, equalTo object: U) -> Self {
 		let objectId = object.json.objectId
 		if key == "objectId" {
-			return constraint(.EqualTo(key, Value(objectId)))
+			return constraint(.EqualTo(key, Valuee(objectId)))
 		} else {
 			return constraint(.EqualTo(key, Pointer(object: object)))
 		}
@@ -750,7 +750,7 @@ extension _Query {
 		if let date = object as? NSDate {
 			return constraint(.GreaterThan(key, Date(date: date)))
 		}
-		return constraint(.GreaterThan(key, Value(object)))
+		return constraint(.GreaterThan(key, Valuee(object)))
 	}
 	
 	public func whereKey<U: ParseType>(key: String, lessThan object: U) -> Self {
@@ -761,29 +761,29 @@ extension _Query {
 		if let date = object as? NSDate {
 			return constraint(.LessThan(key, Date(date: date)))
 		}
-		return constraint(.LessThan(key, Value(object)))
+		return constraint(.LessThan(key, Valuee(object)))
 	}
 	
-	public func whereKey(key: String, containedIn: [Value]) -> Self {
+	public func whereKey(key: String, containedIn: [Valuee]) -> Self {
 		return constraint(.In(key, containedIn))
 	}
 	
 	public func whereKey(key: String, containedIn: [String]) -> Self {
-		let values = containedIn.map({ Value($0) })
+		let values = containedIn.map({ Valuee($0) })
 		return constraint(.In(key, values))
 	}
 	
 	public func whereKey(key: String, containedIn: [Int]) -> Self {
-		let values = containedIn.map({ Value($0) })
+		let values = containedIn.map({ Valuee($0) })
 		return constraint(.In(key, values))
 	}
 	
-	public func whereKey(key: String, notContainedIn: [Value]) -> Self {
+	public func whereKey(key: String, notContainedIn: [Valuee]) -> Self {
 		return constraint(.NotIn(key, notContainedIn))
 	}
 	
 	public func whereKey(key: String, notContainedIn: [String]) -> Self {
-		let values = notContainedIn.map({ Value($0) })
+		let values = notContainedIn.map({ Valuee($0) })
 		return constraint(.NotIn(key, values))
 	}
 	
@@ -873,7 +873,7 @@ extension _Operations {
 		if let date = value as? NSDate {
 			return set(key, value: Date(date: date))
 		}
-		return set(key, value: Value(value))
+		return set(key, value: Valuee(value))
 	}
 	
 	public func set<U: ParseObject>(key: String, value: U) -> Self {
@@ -923,9 +923,9 @@ extension _Operations {
 
 //MARK: - Comparable
 
-extension Value: Comparable {}
+extension Valuee: Comparable {}
 
-public func ==(lhs: Value, rhs: Value) -> Bool {
+public func ==(lhs: Valuee, rhs: Valuee) -> Bool {
 	switch (lhs.type, rhs.type) {
 	case (.Number, .Number):
 		return (lhs.object as! Double) == (rhs.object as! Double)
@@ -938,7 +938,7 @@ public func ==(lhs: Value, rhs: Value) -> Bool {
 	}
 }
 
-public func <(lhs: Value, rhs: Value) -> Bool {
+public func <(lhs: Valuee, rhs: Valuee) -> Bool {
 	switch (lhs.type, rhs.type) {
 	case (.Number, .Number):
 		return (lhs.object as! Double) < (rhs.object as! Double)
@@ -995,8 +995,8 @@ func ==(lhs: ParseType, rhs: ParseType) -> Bool {
 		}
 		return false
 	}
-	if let left = lhs as? Value {
-		if let right = rhs as? Value {
+	if let left = lhs as? Valuee {
+		if let right = rhs as? Valuee {
 			return left == right
 		}
 	}
@@ -1010,8 +1010,8 @@ func <(lhs: ParseType, rhs: ParseType) -> Bool {
 		}
 		return false
 	}
-	if let left = lhs as? Value {
-		if let right = rhs as? Value {
+	if let left = lhs as? Valuee {
+		if let right = rhs as? Valuee {
 			return left < right
 		}
 	}
@@ -1052,7 +1052,7 @@ struct ClassCache {
 				toRemove.append(i)
 			}
 		}
-		toRemove.map { self.inner.removeAtIndex($0) }
+		_ = toRemove.map { self.inner.removeAtIndex($0) }
 	}
 }
 
@@ -1131,20 +1131,20 @@ extension Query {
 	}
 }
 
-func sort(inout results: [Data], #keys: String?) {
-	if var order = keys {
-		let orders = split(order) { $0 == "," }
+func sort(inout results: [Data], keys: String?) {
+	if let order = keys {
+		let orders = order.characters.split { $0 == "," }.map { String($0) }
 		var comparators: [(String, Bool)] = []
 		for key in orders {
 			let desc = key.hasPrefix("-")
 			if desc {
 				let key = key.substringFromIndex(key.startIndex.successor())
-				comparators.append(key, false)
+				comparators.append((key, false))
 			} else {
-				comparators.append(key, true)
+				comparators.append((key, true))
 			}
 		}
-		sort(&results) {
+		results.sortInPlace {
 			for (key, asc) in comparators {
 				if $1[key] == $0[key] {
 					continue
@@ -1173,11 +1173,11 @@ extension Constraint: LocalMatch {
 			return json[key] < right
 		case .MatchRegex(let key, let regexp):
 			let string = json.value(key).string!
-			return regexp.firstMatchInString(string, options: nil, range: NSMakeRange(0, count(string))) != nil
+			return regexp.firstMatchInString(string, options: [], range: NSMakeRange(0, string.characters.count)) != nil
 		case .In(let key, let keys):
-			return contains(keys, json.value(key))
+			return keys.contains(json.value(key))
 		case .NotIn(let key, let keys):
-			return !contains(keys, json.value(key))
+			return !keys.contains(json.value(key))
 		case .Or(let left, let right):
 			return left.match(json) || right.match(json)
 		case .Exists(let key, let exists):
@@ -1198,8 +1198,8 @@ extension Constraints: LocalMatch {
 	func allowsLocalSearch() -> Bool {
 		for constraint in inner {
 			switch constraint {
-			case .EqualTo(let key, let to):
-				if let pointer = to as? Pointer {
+			case .EqualTo(_, let to):
+				if to is Pointer {
 					return false
 				}
 			default:
@@ -1209,9 +1209,9 @@ extension Constraints: LocalMatch {
 		return true
 	}
 	
-	mutating func replaceSubQueries(keys: (String, Constraints) -> [Value]) {
+	mutating func replaceSubQueries(keys: (String, Constraints) -> [Valuee]) {
 		var replaced = false
-		for (index, constraint) in enumerate(inner) {
+		for (index, constraint) in inner.enumerate() {
 			switch constraint {
 			case .MatchQuery(let key, let matchKey, let constraints):
 				inner[index] = Constraint.In(key, keys(matchKey, constraints))
@@ -1225,7 +1225,7 @@ extension Constraints: LocalMatch {
 		}
 		
 		if replaced {
-			println("replaced subqueries with in/notin queries \(inner)")
+			print("replaced subqueries with in/notin queries \(inner)")
 		}
 	}
 	
@@ -1261,14 +1261,14 @@ extension _Query {
 	}
 	
 	public func each(group: dispatch_group_t, concurrent: Int, block: ([String: AnyObject], () -> ()) -> Void) {
-		let semophore = dispatch_semaphore_create(concurrent)
+		let semaphore = dispatch_semaphore_create(concurrent)
 		let queue = dispatch_queue_create(nil, DISPATCH_QUEUE_CONCURRENT)
 		self.each(group) { (json) in
 			dispatch_group_enter(group)
 			dispatch_barrier_async(queue) {
-				dispatch_semaphore_wait(semophore, DISPATCH_TIME_FOREVER)
+				dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER)
 				block(json) {
-					dispatch_semaphore_signal(semophore)
+					dispatch_semaphore_signal(semaphore)
 					dispatch_group_leave(group)
 				}
 			}
@@ -1280,11 +1280,11 @@ struct LocalCache<T: ParseObject> {
 	static func loadCache() -> [String: AnyObject]? {
 		let key = "v3.\(T.className).json"
 		let paths = NSSearchPathForDirectoriesInDomains(.DocumentDirectory, .UserDomainMask, true)
-		if let root = paths.first as? NSString {
-			let file = root.stringByAppendingPathComponent(key)
+		if let root = paths.first {
+			let file = (root as NSString).stringByAppendingPathComponent(key)
 			if let data = NSData(contentsOfFile: file) {
-				println("loading from file \(file)")
-				if let json = NSJSONSerialization.JSONObjectWithData(data, options: .AllowFragments, error: nil) as? [String: AnyObject] {
+				print("loading from file \(file)")
+				if let json = (try? NSJSONSerialization.JSONObjectWithData(data, options: .AllowFragments)) as? [String: AnyObject] {
 					return json
 				}
 			}
@@ -1295,10 +1295,11 @@ struct LocalCache<T: ParseObject> {
 	static func writeCache(json: [String: AnyObject]) {
 		let key = "v3.\(T.className).json"
 		let paths = NSSearchPathForDirectoriesInDomains(.DocumentDirectory, .UserDomainMask, true)
-		if let root = paths.first as? NSString {
-			NSJSONSerialization.dataWithJSONObject(json, options: nil, error: nil)?
-				.writeToFile(root.stringByAppendingPathComponent(key), atomically: true)
-			println("\(T.className) data wrote to \(root.stringByAppendingPathComponent(key))")
+		if let root = paths.first {
+			let rootString = root as NSString
+			(try? NSJSONSerialization.dataWithJSONObject(json, options: []))?
+				.writeToFile(rootString.stringByAppendingPathComponent(key), atomically: true)
+			print("\(T.className) data wrote to \(rootString.stringByAppendingPathComponent(key))")
 		}
 	}
 	
@@ -1334,10 +1335,10 @@ struct LocalCache<T: ParseObject> {
 				let cachedTime = NSDate(timeIntervalSinceReferenceDate: time)
 				if cachedTime.timeIntervalSinceNow > -maxAge {
 					if let cache = cache["results"] as? [String: [String: AnyObject]] {
-						let allData = cache.values.array.map({ Data($0) })
+						let allData = Array(cache.values).map({ Data($0) })
 						if allData.count > 0 {
 							LocalPersistence.classCache[T.className] = ClassCache(inner: allData)
-							println("use local data \(T.className) count=\(allData.count)")
+							print("use local data \(T.className) count=\(allData.count)")
 							done?(allData)
 							return
 						}
@@ -1348,7 +1349,7 @@ struct LocalCache<T: ParseObject> {
 		let group = dispatch_group_create()
 		var cache: [String: AnyObject] = [:]
 		var jsons: [Data] = []
-		println("start caching all \(T.className)")
+		print("start caching all \(T.className)")
 		
 		Query<T>().local(false).each(group) { object in
 			cache[object["objectId"] as! String] = object
@@ -1357,7 +1358,7 @@ struct LocalCache<T: ParseObject> {
 		
 		dispatch_group_notify(group, dispatch_get_main_queue()) {
 			LocalPersistence.classCache[T.className] = ClassCache(inner: jsons)
-			println("\(T.className) ready")
+			print("\(T.className) ready")
 			let json: [String: AnyObject] = [
 				"time": NSDate.timeIntervalSinceReferenceDate(),
 				"results": cache,
@@ -1418,13 +1419,13 @@ public struct Relations {
 				closure(relation)
 			}
 		} else {
-			var relation = Relation()
-			var group = dispatch_group_create()
+			let relation = Relation()
+			let group = dispatch_group_create()
 			relations[mykey] = (group, relation)
 			dispatch_group_enter(group)
 			Query<T>().local(false).whereKey(key, equalTo: to).list { (data, error) in
 				relation.cache = data.map { Pointer(className: T.className, data: $0) }
-				println("caching relationship \(mykey): \(relation.cache)")
+				print("caching relationship \(mykey): \(relation.cache)")
 				dispatch_group_leave(group)
 			}
 			dispatch_group_notify(group, dispatch_get_main_queue()) {
@@ -1440,13 +1441,13 @@ public struct Relations {
 				closure(relation)
 			}
 		} else {
-			var relation = Relation()
-			var group = dispatch_group_create()
+			let relation = Relation()
+			let group = dispatch_group_create()
 			relations[mykey] = (group, relation)
 			dispatch_group_enter(group)
 			_Query(className: toClass, constraints: .RelatedTo(key, pointer)).list { (data, error) in
 				relation.cache = data.map { Pointer(className: toClass, data: $0) }
-				println("caching relationship \(mykey): \(relation.cache)")
+				print("caching relationship \(mykey): \(relation.cache)")
 				dispatch_group_leave(group)
 			}
 			dispatch_group_notify(group, dispatch_get_main_queue()) {
@@ -1492,7 +1493,7 @@ public struct Client {
 	static var manager: Manager?
 	
 	static func request(method: Method, _ path: String, _ parameters: [String: AnyObject]?, _ closure: ([String: AnyObject]?, NSError?) -> Void) {
-		var pathString = "https://api.parse.com/1\(path)"
+		let pathString = "https://api.parse.com/1\(path)"
 		var encoding: ParameterEncoding
 		switch method {
 		case .POST, .PUT:
@@ -1500,36 +1501,41 @@ public struct Client {
 		default:
 			encoding = .URL
 		}
-		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) {
-			var request = self.manager!.request(method, pathString, parameters: parameters, encoding: encoding)
-			request.responseJSON { (req, res, json, error) in
-				if let object = json as? [String: AnyObject] {
+		
+		// TODO: RE-do dispatch_group_notify (or dispatch_group_wait) but can't get it to compile and run yet
+		//		 notify will never return, wait does not compile.
+		
+//		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) {
+			let request = self.manager!.request(method, pathString, parameters: parameters, encoding: encoding)
+			
+			request.responseJSON { (req, res, json) in
+				if let object = json.value as? [String: AnyObject] {
 					if object["error"] != nil && object["code"] != nil {
 						closure(nil, NSError(domain: ParseErrorDomain, code: object["code"] as! Int, userInfo: [NSLocalizedDescriptionKey: object["error"] as! String]))
 						return
 					}
-					closure(object, error)
+					closure(object, nil)
 				} else {
-					closure(nil, error)
+					closure(nil, nil) // TODO: Error
 				}
 			}
 			return
-		}
+//		}
 	}
 	
 	static func request(method: Method, _ path: String, _ data: NSData, _ closure: ([String: AnyObject]?, NSError?) -> Void) {
-		var pathString = "https://api.parse.com/1\(path)"
+		let pathString = "https://api.parse.com/1\(path)"
 		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) { () -> Void in
-			var request = self.manager!.upload(method, pathString, data: data)
-			request.responseJSON(options: nil) { (req, res, json, error) in
-				if let object = json as? [String: AnyObject] {
+			let request = self.manager!.upload(method, pathString, data: data)
+			request.responseJSON(options: []) { (req, res, json) in
+				if let object = json.value as? [String: AnyObject] {
 					if object["error"] != nil && object["code"] != nil {
 						closure(nil, NSError(domain: ParseErrorDomain, code: object["code"] as! Int, userInfo: [NSLocalizedDescriptionKey: object["error"] as! String]))
 						return
 					}
-					closure(object, error)
+					closure(object, nil)
 				} else {
-					closure(nil, error)
+					closure(nil, nil) // TODO: Error
 				}
 			}
 		}
@@ -1553,8 +1559,8 @@ public struct Client {
 		}
 	}
 	
-	public static func setup(#applicationId: String, restKey: String?, masterKey: String? = nil) {
-		var configuration = NSURLSessionConfiguration.defaultSessionConfiguration()
+	public static func setup(applicationId applicationId: String, restKey: String?, masterKey: String? = nil) {
+		let configuration = NSURLSessionConfiguration.defaultSessionConfiguration()
 		var headers = ["X-Parse-Application-Id": applicationId]
 		if let restKey = restKey {
 			headers["X-Parse-REST-API-Key"] = restKey
@@ -1579,7 +1585,7 @@ public struct Client {
 	
 	public static func trackAppOpen() {
 		request(.POST, "/events/AppOpened", [:]) { (json, error) in
-			println("trackAppOpen error = \(error)")
+			print("trackAppOpen error = \(error)")
 		}
 	}
 	
@@ -1605,7 +1611,7 @@ extension ClassOperations {
 	public func save(closure: (T?, NSError?) -> Void) {
 		let param = _composeQuery(self)
 		let _path = path(T.className)
-		println("saving \(param) to \(_path)")
+		print("saving \(param) to \(_path)")
 		Client.request(.POST, _path, param) { (json, error) in
 			if let error = error {
 				closure(nil, error)
@@ -1630,9 +1636,9 @@ extension ObjectOperations {
 			operation.composeQuery(&param)
 		}
 		let _path = path(T.className, objectId: objectId)
-		println("updating \(param) to \(_path)")
+		print("updating \(param) to \(_path)")
 		Client.request(.PUT, _path, param) { (json, error) in
-			if let json = json {
+			if let _ = json {
 				self.updateRelations()
 			}
 			closure(error)
@@ -1662,14 +1668,14 @@ extension Parse {
 
 //MARK: - Printable & Convertible
 
-extension Value: IntegerLiteralConvertible {
+extension Valuee: IntegerLiteralConvertible {
 	public init(integerLiteral value: IntegerLiteralType) {
 		object = value
 		type = .Number
 	}
 }
 
-extension Value: StringLiteralConvertible {
+extension Valuee: StringLiteralConvertible {
 	public init(unicodeScalarLiteral value: StringLiteralType) {
 		object = value
 		type = .String
@@ -1684,7 +1690,7 @@ extension Value: StringLiteralConvertible {
 	}
 }
 
-extension Value: FloatLiteralConvertible {
+extension Valuee: FloatLiteralConvertible {
 	public init(floatLiteral value: FloatLiteralType) {
 		object = value
 		type = .Number
@@ -1701,19 +1707,19 @@ extension Data: DictionaryLiteralConvertible {
 	}
 }
 
-extension Pointer: Printable {
+extension Pointer: CustomStringConvertible {
 	public var description: String {
 		var string = "*\(className).\(objectId)"
 		if let conn = connections {
 			string += " ["
-			string += ", ".join(map(conn) { "\($0):\($1)" })
+			string += conn.map { "\($0):\($1)" }.joinWithSeparator(", ")
 			string += "]"
 		}
 		return string
 	}
 }
 
-extension Constraint: Printable {
+extension Constraint: CustomStringConvertible {
 	public var description: String {
 		switch self {
 		case .EqualTo(let key, let right):
@@ -1744,7 +1750,7 @@ extension Constraint: Printable {
 	}
 }
 
-extension Constraints: Printable {
+extension Constraints: CustomStringConvertible {
 	public var description: String {
 		return "\(inner)"
 	}
@@ -1766,7 +1772,7 @@ public struct ObjectCache {
 	}
 	
 	static func retrivePending<T: ParseObject>(type: T.Type) -> [(objectId: String, closure: Data -> Void)] {
-		if var (timer, pending) = timers[T.className] {
+		if let (timer, pending) = timers[T.className] {
 			let checkouts = pending
 			timers[T.className] = (timer, [])
 			return checkouts
@@ -1776,7 +1782,7 @@ public struct ObjectCache {
 	
 	static func appendClosure<T: ParseObject>(objectId: String, closure: (T) -> Void) {
 		if var (timer, pending) = timers[T.className] {
-			pending.append(objectId: objectId, closure: { closure(T(json: $0)) })
+			pending.append((objectId: objectId, closure: { closure(T(json: $0)) }))
 			timers[T.className] = (timer, pending)
 		}
 	}
@@ -1790,7 +1796,7 @@ public struct ObjectCache {
 			dispatch_source_set_timer(t, dispatch_time(DISPATCH_TIME_NOW, Int64(rush * Double(NSEC_PER_SEC))), DISPATCH_TIME_FOREVER, 0)
 			dispatch_source_set_event_handler(t) {
 				let checkouts = self.retrivePending(T.self)
-				let objectIds = checkouts.map { Value($0.objectId) }
+				let objectIds = checkouts.map { Valuee($0.objectId) }
 				_Query(className: T.className, constraints: .In("objectId", objectIds)).list { (jsons, error) in
 					for (objectId, closure) in checkouts {
 						for json in jsons {
