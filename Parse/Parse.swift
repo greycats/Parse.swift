@@ -1502,7 +1502,7 @@ public struct Client {
 			encoding = .URL
 		}
 		
-		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) {
+		dispatch_group_notify(dispatch_group_create(), dispatch_get_main_queue()) {
 			let request = self.manager!.request(method, pathString, parameters: parameters, encoding: encoding)
 			
 			request.responseJSON { (req, res, json) in
