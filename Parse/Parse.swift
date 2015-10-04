@@ -1486,7 +1486,7 @@ public struct Client {
 		clientCreated = true
 		
 		var group = dispatch_group_create()
-		dispatch_group_enter(group)
+//		dispatch_group_enter(group)
 		return group
 		}()
 	
@@ -1502,7 +1502,7 @@ public struct Client {
 			encoding = .URL
 		}
 		
-		dispatch_group_notify(dispatch_group_create(), dispatch_get_main_queue()) {
+		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) {
 			let request = self.manager!.request(method, pathString, parameters: parameters, encoding: encoding)
 			
 			request.responseJSON { (req, res, json) in
@@ -1577,7 +1577,7 @@ public struct Client {
 		}
 		configuration.HTTPAdditionalHeaders = headers
 		self.manager = Manager(configuration: configuration)
-		dispatch_group_leave(manager_init_group)
+//		dispatch_group_leave(manager_init_group)
 	}
 	
 	public static func trackAppOpen() {
