@@ -8,7 +8,7 @@
 import Alamofire
 typealias Method = Alamofire.Method
 
-public let ParseErrorDomain = "co.interactivelabs.parse"
+public var ParseErrorDomain = "co.interactivelabs.parse"
 
 public protocol ParseType {
 	var json: AnyObject { get }
