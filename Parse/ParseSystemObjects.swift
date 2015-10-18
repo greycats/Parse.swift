@@ -6,6 +6,10 @@
 //  Copyright (c) 2015 Rex Sheng. All rights reserved.
 //
 
+import UIKit
+
+let APPGROUP_USER = "AppGroupUser"
+
 public struct User: ParseObject {
 	public static var className: String { return "_User" }
 	public var json: Data
@@ -33,7 +37,7 @@ extension User {
 		var userDefaults: NSUserDefaults
 		#if TARGET_IS_EXTENSION
 			userDefaults = NSUserDefaults(suiteName: APPGROUP_USER)!
-		#else
+			#else
 			userDefaults = NSUserDefaults.standardUserDefaults()
 		#endif
 		if let object = userDefaults.objectForKey("user") as? [String: AnyObject] {
@@ -47,10 +51,10 @@ extension User {
 		if let user = currentUser {
 			if let token = user.json.value("sessionToken").string {
 				block(user, nil)
-				println("returned user may not be valid server side")
+				print("returned user may not be valid server side")
 				Client.loginSession(token) { error in
 					if let error = error {
-						println("session login failed \(user.username) \(error)")
+						print("session login failed \(user.username) \(error)")
 						block(user, error)
 					}
 				}
@@ -74,7 +78,7 @@ extension User {
 					let defaults = NSUserDefaults(suiteName: APPGROUP_USER)
 					defaults?.setObject(json, forKey: "user")
 					Client.updateSession(token)
-					println("logIn user \(json)")
+					print("logIn user \(json)")
 					dispatch_async(dispatch_get_main_queue()) {
 						callback(user, nil)
 					}
@@ -103,7 +107,7 @@ extension User {
 		}
 		operation.save { (user, error) in
 			if let error = error {
-				println("error \(error)")
+				print("error \(error)")
 				return callback(nil, error)
 			}
 			if let user = user {
@@ -113,7 +117,7 @@ extension User {
 					defaults?.setObject(user.json.raw, forKey: "user")
 					NSUserDefaults.standardUserDefaults().synchronize()
 					Client.updateSession(token)
-					println("signUp user \(user)")
+					print("signUp user \(user)")
 					callback(user, error)
 				} else {
 					self.logIn(username, password: password, callback: callback)
@@ -196,7 +200,7 @@ extension Installation {
 		operation.save { (installation, error) in
 			if let installation = installation {
 				self.currentInstallation = installation
-				println("current installation \(installation.json)")
+				print("current installation \(installation.json)")
 			}
 		}
 	}
@@ -206,7 +210,7 @@ extension Installation {
 	}
 	
 	public static func clearBadge() {
-		if var installation = Installation.currentInstallation {
+		if let installation = Installation.currentInstallation {
 			installation.op().set("badge", value: 0).update { _ in }
 		}
 	}
@@ -216,7 +220,7 @@ public struct Push {
 	public static func send(data: [String: AnyObject], query: Query<Installation>) {
 		var _where: [String: AnyObject] = [:]
 		query.composeQuery(&_where)
-		println("push where = \(_where)")
+		print("push where = \(_where)")
 		Client.request(.POST, "/push", ["where": _where, "data": data]) { _ in }
 	}
 }
