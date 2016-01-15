@@ -1,0 +1,13 @@
+PODS:
+  - Alamofire (3.1.4)
+  - Greycats (2.2.9)
+
+DEPENDENCIES:
+  - Alamofire
+  - Greycats
+
+SPEC CHECKSUMS:
+  Alamofire: fbc829692f351fa1d8a31dd75fd7f7f56fea31fb
+  Greycats: 1bd7a7b316719eb203c46785e9a43f4433e439c5
+
+COCOAPODS: 0.39.0
