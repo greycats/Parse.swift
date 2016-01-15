@@ -47,10 +47,10 @@ extension User {
 		if let user = currentUser {
 			if let token = user.json.value("sessionToken").string {
 				block(user, nil)
-				println("returned user may not be valid server side")
+				print("returned user may not be valid server side")
 				Client.loginSession(token) { error in
 					if let error = error {
-						println("session login failed \(user.username) \(error)")
+						print("session login failed \(user.username) \(error)")
 						block(user, error)
 					}
 				}
@@ -71,10 +71,10 @@ extension User {
 				if let token = user.json.value("sessionToken").string {
 					NSUserDefaults.standardUserDefaults().setObject(json, forKey: "user")
 					NSUserDefaults.standardUserDefaults().synchronize()
-					let defaults = NSUserDefaults(suiteName: APPGROUP_USER)
-					defaults?.setObject(json, forKey: "user")
+//					let defaults = NSUserDefaults(suiteName: APPGROUP_USER)
+//					defaults?.setObject(json, forKey: "user")
 					Client.updateSession(token)
-					println("logIn user \(json)")
+					print("logIn user \(json)")
 					dispatch_async(dispatch_get_main_queue()) {
 						callback(user, nil)
 					}
@@ -86,8 +86,8 @@ extension User {
 	}
 	
 	public static func logOut() {
-		let defaults = NSUserDefaults(suiteName: APPGROUP_USER)
-		defaults?.removeObjectForKey("user")
+//		let defaults = NSUserDefaults(suiteName: APPGROUP_USER)
+//		defaults?.removeObjectForKey("user")
 		NSUserDefaults.standardUserDefaults().removeObjectForKey("user")
 		NSUserDefaults.standardUserDefaults().synchronize()
 		Client.updateSession(nil)
@@ -103,17 +103,17 @@ extension User {
 		}
 		operation.save { (user, error) in
 			if let error = error {
-				println("error \(error)")
+				print("error \(error)")
 				return callback(nil, error)
 			}
 			if let user = user {
 				if let token = user.json.value("sessionToken").string {
 					NSUserDefaults.standardUserDefaults().setObject(user.json.raw, forKey: "user")
-					let defaults = NSUserDefaults(suiteName: APPGROUP_USER)
-					defaults?.setObject(user.json.raw, forKey: "user")
+//					let defaults = NSUserDefaults(suiteName: APPGROUP_USER)
+//					defaults?.setObject(user.json.raw, forKey: "user")
 					NSUserDefaults.standardUserDefaults().synchronize()
 					Client.updateSession(token)
-					println("signUp user \(user)")
+					print("signUp user \(user)")
 					callback(user, error)
 				} else {
 					self.logIn(username, password: password, callback: callback)
@@ -196,7 +196,7 @@ extension Installation {
 		operation.save { (installation, error) in
 			if let installation = installation {
 				self.currentInstallation = installation
-				println("current installation \(installation.json)")
+				print("current installation \(installation.json)")
 			}
 		}
 	}
@@ -206,7 +206,7 @@ extension Installation {
 	}
 	
 	public static func clearBadge() {
-		if var installation = Installation.currentInstallation {
+		if let installation = Installation.currentInstallation {
 			installation.op().set("badge", value: 0).update { _ in }
 		}
 	}
@@ -216,7 +216,7 @@ public struct Push {
 	public static func send(data: [String: AnyObject], query: Query<Installation>) {
 		var _where: [String: AnyObject] = [:]
 		query.composeQuery(&_where)
-		println("push where = \(_where)")
+		print("push where = \(_where)")
 		Client.request(.POST, "/push", ["where": _where, "data": data]) { _ in }
 	}
 }
