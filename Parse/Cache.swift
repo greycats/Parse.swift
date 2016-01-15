@@ -215,7 +215,7 @@ extension Query {
 
 //MARK: Cache
 
-struct ObjectCache {
+private struct ObjectCache {
 	static var timers: [String: (dispatch_source_t, [(objectId: String, closure: Data -> Void)])] = [:]
 
 	static func timer(key: String) -> dispatch_source_t {

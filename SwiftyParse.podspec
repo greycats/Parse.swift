@@ -9,7 +9,7 @@
 
 Pod::Spec.new do |s|
   s.name             = "SwiftyParse"
-  s.version          = "0.9.0"
+  s.version          = "0.9.1"
   s.summary          = "Parse client in Swift. Do it right."
   s.homepage         = "https://github.com/greycats/Parse.swift"
   s.license          = 'MIT'
