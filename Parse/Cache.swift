@@ -63,9 +63,11 @@ private struct LocalPersistence {
 	}
 }
 
-struct LocalCache<T: ParseObject> {
-	static func loadCache() -> [String: AnyObject]? {
-		let key = "v3.\(T.className).json"
+struct LocalCache {
+	let className: String
+
+	func loadCache() -> [String: AnyObject]? {
+		let key = "v3.\(className).json"
 		let paths = NSSearchPathForDirectoriesInDomains(.DocumentDirectory, .UserDomainMask, true)
 		if let root = paths.first {
 			let file = root.stringByAppendingString("/\(key)")
@@ -79,44 +81,44 @@ struct LocalCache<T: ParseObject> {
 		return nil
 	}
 
-	static func writeCache(json: [String: AnyObject]) {
-		let key = "v3.\(T.className).json"
+	func writeCache(json: [String: AnyObject]) {
+		let key = "v3.\(className).json"
 		let paths = NSSearchPathForDirectoriesInDomains(.DocumentDirectory, .UserDomainMask, true)
 		if let root = paths.first {
 			let file = root.stringByAppendingString("/\(key)")
 			(try? NSJSONSerialization.dataWithJSONObject(json, options: []))?
 				.writeToFile(file, atomically: true)
-			print("\(T.className) data wrote to \(file)")
+			print("\(className) data wrote to \(file)")
 		}
 	}
 
-	static func append(dom: Data) {
-		if let cache = self.loadCache() {
+	func append(dom: Data) {
+		if let cache = loadCache() {
 			var results = cache["results"] as! [String: AnyObject]
 			results[dom.objectId] = dom.raw
-			LocalPersistence.classCache[T.className]?.appendData(dom)
+			LocalPersistence.classCache[className]?.appendData(dom)
 			let json: [String: AnyObject] = [
 				"time": NSDate.timeIntervalSinceReferenceDate(),
 				"results": results,
-				"class": T.className]
-			self.writeCache(json)
+				"class": className]
+			writeCache(json)
 		}
 	}
 
-	static func remove(dom: Data) {
-		if let cache = self.loadCache() {
+	func remove(dom: Data) {
+		if let cache = loadCache() {
 			var results = cache["results"] as! [String: AnyObject]
 			results.removeValueForKey(dom.objectId)
-			LocalPersistence.classCache[T.className]?.removeData(dom)
+			LocalPersistence.classCache[className]?.removeData(dom)
 			let json: [String: AnyObject] = [
 				"time": NSDate.timeIntervalSinceReferenceDate(),
 				"results": results,
-				"class": T.className]
-			self.writeCache(json)
+				"class": className]
+			writeCache(json)
 		}
 	}
 
-	static func persistent(maxAge: NSTimeInterval, done: ([Data] -> Void)?) {
+	func persistent(maxAge: NSTimeInterval, done: ([Data] -> Void)?) {
 		if let cache = loadCache() {
 			if let time = cache["time"] as? Double {
 				let cachedTime = NSDate(timeIntervalSinceReferenceDate: time)
@@ -124,8 +126,8 @@ struct LocalCache<T: ParseObject> {
 					if let cache = cache["results"] as? [String: [String: AnyObject]] {
 						let allData = cache.map { Data($1) }
 						if allData.count > 0 {
-							LocalPersistence.classCache[T.className] = ClassCache(inner: allData)
-							print("use local data \(T.className) count=\(allData.count)")
+							LocalPersistence.classCache[className] = ClassCache(inner: allData)
+							print("use local data \(className) count=\(allData.count)")
 							done?(allData)
 							return
 						}
@@ -136,20 +138,20 @@ struct LocalCache<T: ParseObject> {
 		let group = dispatch_group_create()
 		var cache: [String: AnyObject] = [:]
 		var jsons: [Data] = []
-		print("start caching all \(T.className)")
+		print("start caching all \(className)")
 
-		Query<T>().local(false).each(group) { object in
+		_Query(className: className).each(group) { object in
 			cache[object["objectId"] as! String] = object
 			jsons.append(Data(object))
 		}
 
 		dispatch_group_notify(group, dispatch_get_main_queue()) {
-			LocalPersistence.classCache[T.className] = ClassCache(inner: jsons)
-			print("\(T.className) ready")
+			LocalPersistence.classCache[self.className] = ClassCache(inner: jsons)
+			print("\(self.className) ready")
 			let json: [String: AnyObject] = [
 				"time": NSDate.timeIntervalSinceReferenceDate(),
 				"results": cache,
-				"class": T.className]
+				"class": self.className]
 			self.writeCache(json)
 			done?(jsons)
 		}
@@ -348,13 +350,12 @@ private struct ObjectCache {
 	}
 }
 
-extension Parse {
-	public class func get(objectId: String, closure: (T) -> Void) {
-		ObjectCache.get(objectId, closure: closure)
+extension ParseObject {
+	public static func persistent(maxAge: NSTimeInterval, done: ([Data] -> Void)? = nil) {
+		LocalCache(className: className).persistent(maxAge, done: done)
 	}
 
-	public func persistent(maxAge: NSTimeInterval, done: ([Data] -> Void)? = nil) -> Self {
-		LocalCache<T>.persistent(maxAge, done: done)
-		return self
+	public static func get(objectId: String, closure: (Self) -> ()) {
+		ObjectCache.get(objectId, closure: closure)
 	}
 }

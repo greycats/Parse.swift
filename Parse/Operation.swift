@@ -61,12 +61,29 @@ extension ObjectOperations {
 	}
 }
 
-extension Parse {
-	public class func operation(objectId: String) -> ObjectOperations<T> {
-		return ObjectOperations<T>(objectId, operations: [])
+extension ParseObject {
+	public func operation() -> ObjectOperations<Self> {
+		return ObjectOperations(objectId, operations: [])
 	}
 
-	public class func operation(on on: T) -> ObjectOperations<T> {
+	public static func query() -> Query<Self> {
+		return Query()
+	}
+
+	public func addRelation<U: ParseObject>(key: String, to: U) -> ObjectOperations<Self> {
+		return operation().addRelation(key, to: to)
+	}
+	public func removeRelation<U: ParseObject>(key: String, to: U) -> ObjectOperations<Self> {
+		return operation().removeRelation(key, to: to)
+	}
+
+	public static func relatedTo<U: ParseObject>(object: U, key: String) -> Query<Self> {
+		return query().relatedTo(object, key: key)
+	}
+}
+
+extension Parse {
+	public static func operation<T: ParseObject>(on on: T) -> ObjectOperations<T> {
 		let operations = ObjectOperations<T>(on.json.objectId, operations: [])
 		if let pending = on.json.pending {
 			for (key, value) in pending {
@@ -83,10 +100,6 @@ extension Parse {
 			}
 		}
 		return operations
-	}
-
-	public class func operation() -> ClassOperations<T> {
-		return ClassOperations<T>()
 	}
 }
 

@@ -7,25 +7,16 @@
 //
 
 public struct User: ParseObject {
-	public static var className: String { return "_User" }
-	public var json: Data
-	public var objectId: String {
-		return json.objectId
-	}
-	public init(json: Data) {
-		self.json = json
-	}
-	var username: String {
-		return json.value("username").string!
-	}
+	public static let className = "_User"
+	public var json: Data!
+	public init() {}
+	let username = Field<String>("username")
 }
 
 public struct Installation: ParseObject {
-	public static var className: String { return "_Installation" }
-	public var json: Data
-	public init(json: Data) {
-		self.json = json
-	}
+	public static let className = "_Installation"
+	public var json: Data!
+	public init() {}
 }
 
 extension User {
@@ -147,20 +138,19 @@ extension Relations {
 	}
 }
 
-extension User {
-	
-	public func addRelation<U: ParseObject>(key: String, to: U) -> ObjectOperations<User> {
-		return Parse<User>.operation(objectId).addRelation(key, to: to)
-	}
-	
-	public func removeRelation<U: ParseObject>(key: String, to: U) -> ObjectOperations<User> {
-		return Parse<User>.operation(objectId).removeRelation(key, to: to)
-	}
-	
-	public func relatedTo<U: ParseObject>(object: U, key: String) -> Query<User> {
-		return Query<User>(constraints: .RelatedTo(key, Pointer(object: object)))
-	}
-}
+//extension User {
+//	public func addRelation<U: ParseObject>(key: String, to: U) -> ObjectOperations<User> {
+//		return ObjectOperations<User>(objectId, operations: []).addRelation(key, to: to)
+//	}
+//	
+//	public func removeRelation<U: ParseObject>(key: String, to: U) -> ObjectOperations<User> {
+//		return Parse<User>.operation(objectId).removeRelation(key, to: to)
+//	}
+//	
+//	public func relatedTo<U: ParseObject>(object: U, key: String) -> Query<User> {
+//		return Query<User>(constraints: .RelatedTo(key, Pointer(object: object)))
+//	}
+//}
 
 extension ClassOperations {
 	public func setSecurity(readwrite: User) -> Self {
@@ -188,7 +178,7 @@ extension Installation {
 	static var currentInstallation: Installation?
 	
 	public static func register(deviceToken: NSData, channels: [String], otherInfo: ((ClassOperations<Installation>) -> Void)? = nil) {
-		let operation = Parse<Installation>.operation()
+		let operation = ClassOperations<Installation>()
 			.set("deviceType", value: "ios")
 			.set("deviceToken", value: deviceToken.hexadecimalString)
 			.set("channels", value: channels)
@@ -200,14 +190,10 @@ extension Installation {
 			}
 		}
 	}
-	
-	func op() -> ObjectOperations<Installation> {
-		return Parse<Installation>.operation(json.objectId)
-	}
-	
+
 	public static func clearBadge() {
 		if let installation = Installation.currentInstallation {
-			installation.op().set("badge", value: 0).update { _ in }
+			installation.operation().set("badge", value: 0).update { _ in }
 		}
 	}
 }

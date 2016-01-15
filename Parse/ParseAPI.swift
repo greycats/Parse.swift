@@ -287,7 +287,7 @@ extension ClassOperations: QueryComposer {
 				object["createdAt"] = json["createdAt"]
 				object["objectId"] = json["objectId"]
 				let data = Data(object)
-				LocalCache<T>.append(data)
+				LocalCache(className: T.className).append(data)
 				closure(T(json: data), nil)
 			}
 		}

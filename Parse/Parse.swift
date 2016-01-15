@@ -5,7 +5,7 @@
 //
 //
 
-public class Parse<T: ParseObject> {
+public struct Parse {
 }
 
 public protocol ParseType {
@@ -18,9 +18,57 @@ protocol _ParseType: ParseType {
 }
 
 public protocol ParseObject {
-	init(json: Data)
-	var json: Data { get }
+	var json: Data! { get set }
 	static var className: String { get }
+	var objectId: String { get }
+	var createdAt: NSDate? { get }
+	init()
+}
+
+public protocol AnyField {
+	init(_ key: String)
+	func connect(json: Data)
+}
+
+extension ParseObject {
+	func setupFields() {
+		let mirror = Mirror(reflecting: self)
+		for (_, value) in mirror.children {
+			if let value = value as? AnyField {
+				value.connect(json)
+			}
+		}
+	}
+	init(json: Data) {
+		self.init()
+		self.json = json
+		setupFields()
+	}
+
+	public var objectId: String {
+		return json.objectId
+	}
+
+	public var createdAt: NSDate? {
+		return json.date("createdAt")?.date
+	}
+}
+
+
+public class Field<T>: AnyField {
+	private let key: String
+	private var json: ParseValue!
+	public required init(_ key: String) {
+		self.key = key
+	}
+
+	public func connect(json: Data) {
+		self.json = json[key] as! ParseValue
+	}
+
+	public func get() -> T? {
+		return json.object as? T
+	}
 }
 
 public struct ParseValue: _ParseType {
