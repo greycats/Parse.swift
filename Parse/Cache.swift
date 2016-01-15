@@ -6,7 +6,6 @@
 //  Copyright © 2016 Rex Sheng. All rights reserved.
 //
 
-
 //MARK: - Local Search & Cache
 
 private struct ClassCache {
@@ -157,16 +156,95 @@ struct LocalCache<T: ParseObject> {
 	}
 }
 
+//MARKL Local Search
+
 protocol LocalMatch {
 	func match(json: Data) -> Bool
 }
 
-extension Query {
-	func searchLocal(closure: ([String: AnyObject]?, NSError?) -> Void) -> Bool {
+extension Constraint: LocalMatch {
+	func match(json: Data) -> Bool {
+		switch self {
+		case .EqualTo(let key, let right):
+			return json[key] == right
+		case .GreaterThan(let key, let right):
+			return right < json[key]
+		case .LessThan(let key, let right):
+			return json[key] < right
+		case .MatchRegex(let key, let regexp):
+			let string = json.value(key).string!
+			return regexp.firstMatchInString(string, options: [], range: NSMakeRange(0, string.characters.count)) != nil
+		case .In(let key, let keys):
+			return keys.contains(json.value(key))
+		case .NotIn(let key, let keys):
+			return !keys.contains(json.value(key))
+		case .Or(let left, let right):
+			return left.match(json) || right.match(json)
+		case .Exists(let key, let exists):
+			let isNil = json.value(key).type == .Null
+			if exists {
+				return !isNil
+			} else {
+				return isNil
+			}
+		default:
+			return false
+		}
+	}
+}
+
+extension Constraints: LocalMatch {
+	private func allowsLocalSearch() -> Bool {
+		for constraint in inner {
+			switch constraint {
+			case .EqualTo(_, let to):
+				if let _ = to as? Pointer {
+					return false
+				}
+			default:
+				continue
+			}
+		}
+		return true
+	}
+
+	private mutating func replaceSubQueries(keys: (String, Constraints) -> [ParseValue]) {
+		var replaced = false
+		for (index, constraint) in inner.enumerate() {
+			switch constraint {
+			case .MatchQuery(let key, let matchKey, let constraints):
+				inner[index] = .In(key, keys(matchKey, constraints))
+				replaced = true
+			case .DoNotMatchQuery(let key, let dontMatchKey, let constraints):
+				inner[index] = .NotIn(key, keys(dontMatchKey, constraints))
+				replaced = true
+			default:
+				continue
+			}
+		}
+
+		if replaced {
+			print("replaced subqueries with in/notin queries \(inner)")
+		}
+	}
+
+	func match(json: Data) -> Bool {
+		for constraint in inner {
+			let match = constraint.match(json)
+			if !match {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+extension _Query {
+	func searchLocal(closure: ([String: AnyObject]?, ErrorType?) -> Void) -> Bool {
 		if !useLocal || !constraints.allowsLocalSearch() {
 			return false
 		}
-		if let cache = LocalPersistence.classCache[T.className]?.inner {
+		if let cache = LocalPersistence.classCache[constraints.className]?.inner {
 			dispatch_barrier_async(LocalPersistence.local_search_queue) {
 				self.constraints.replaceSubQueries { (key, constraints) in
 					if let innerCache = LocalPersistence.classCache[constraints.className]?.inner {
@@ -186,8 +264,7 @@ extension Query {
 						}
 					}
 				}
-
-				sort(&results, keys: self.order)
+				results.sort(self.order)
 
 				var limit = 100
 				if let _limit = self.limit {
@@ -202,7 +279,7 @@ extension Query {
 					if self.fetchesCount {
 						result["count"] = count
 					} else {
-						result["results"] = results.map({ $0.raw })
+						result["results"] = results.map { $0.raw }
 					}
 					closure(result, nil)
 				}
@@ -238,8 +315,9 @@ private struct ObjectCache {
 	}
 
 	static func appendClosure<T: ParseObject>(objectId: String, closure: (T) -> Void) {
-		if var (timer, pending) = timers[T.className] {
-			pending.append((objectId: objectId, closure: { closure(T(json: $0)) }))
+		if let (timer, pending) = timers[T.className] {
+			var _pending = pending
+			_pending.append((objectId: objectId, closure: { closure(T(json: $0)) }))
 			timers[T.className] = (timer, pending)
 		}
 	}
@@ -254,7 +332,7 @@ private struct ObjectCache {
 			dispatch_source_set_event_handler(t) {
 				let checkouts = self.retrivePending(T.self)
 				let objectIds = checkouts.map { ParseValue($0.objectId) }
-				_Query(className: T.className, constraints: .In("objectId", objectIds)).list { (jsons, error) in
+				_Query(className: T.className, constraints: .In("objectId", objectIds)).getData { (jsons, error) in
 					for (objectId, closure) in checkouts {
 						for json in jsons {
 							if json.objectId == objectId {
@@ -273,5 +351,10 @@ private struct ObjectCache {
 extension Parse {
 	public class func get(objectId: String, closure: (T) -> Void) {
 		ObjectCache.get(objectId, closure: closure)
+	}
+
+	public func persistent(maxAge: NSTimeInterval, done: ([Data] -> Void)? = nil) -> Self {
+		LocalCache<T>.persistent(maxAge, done: done)
+		return self
 	}
 }
