@@ -100,7 +100,7 @@ extension _Query {
 		return Parse.Get(_path, parameters)
 	}
 
-	func data(closure: ([Data], ErrorType?) -> Void) {
+	public func data(closure: ([Data], ErrorType?) -> Void) {
 		client().response(searchLocal) { (json, error) in
 			if let json = json {
 				if let array = json["results"] as? [[String: AnyObject]] {
@@ -112,7 +112,7 @@ extension _Query {
 		}
 	}
 
-	func count(closure: (Int, ErrorType?) -> Void) {
+	public func count(closure: (Int, ErrorType?) -> Void) {
 		fetchesCount = true
 		limit(1)
 		client().response { (json, error) in

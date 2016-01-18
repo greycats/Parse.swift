@@ -116,6 +116,9 @@ extension _Operations {
 	}
 
 	public func set<U: ParseObject>(key: String, value: U) -> Self {
+		if let file = value as? File, name = file.name.get() {
+			return operation(.SetValue(key, AnyWrapper(["name": name, "__type": "File"])))
+		}
 		return operation(.SetValue(key, Pointer(object: value)))
 	}
 

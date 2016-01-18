@@ -27,8 +27,8 @@ public enum Parse: URLRequestConvertible {
 	case Post(String, [String: AnyObject]?)
 	case Put(String, [String: AnyObject]?)
 	case Delete(String, [String: AnyObject]?)
-	case UploadData(String, NSData)
-	case UploadFile(String, NSURL)
+	case UploadData(String, String, NSData)
+	case UploadFile(String, String, NSURL)
 
 	public var URLRequest: NSMutableURLRequest {
 		let _parameters: [String: AnyObject]?
@@ -50,11 +50,11 @@ public enum Parse: URLRequestConvertible {
 			_path = path
 			method = .DELETE
 			_parameters = parameters
-		case .UploadData(let path, _):
+		case .UploadData(let path, _, _):
 			_path = path
 			method = .POST
 			_parameters = nil
-		case .UploadFile(let path, _):
+		case .UploadFile(let path, _, _):
 			_path = path
 			method = .POST
 			_parameters = nil
@@ -76,7 +76,16 @@ public enum Parse: URLRequestConvertible {
 		if let token = Parse.token {
 			URLRequest.setValue(token, forHTTPHeaderField: "X-Parse-Session-Token")
 		}
-		return encoding.encode(URLRequest, parameters: _parameters).0
+		switch self {
+		case .UploadData(_, let mime, _):
+			URLRequest.setValue(mime, forHTTPHeaderField: "Content-Type")
+		case .UploadFile(_, let mime, _):
+			URLRequest.setValue(mime, forHTTPHeaderField: "Content-Type")
+		default:
+			break
+		}
+		let req = encoding.encode(URLRequest, parameters: _parameters).0
+		return req
 	}
 
 	public static func setup(applicationId applicationId: String, restKey: String?, masterKey: String? = nil) {
@@ -121,9 +130,9 @@ public enum Parse: URLRequestConvertible {
 
 	public func response(closure: ([String: AnyObject]?, ErrorType?) -> ()) {
 		switch self {
-		case .UploadFile(_, let data):
+		case .UploadFile(_, _, let data):
 			upload(self, file: data).response(closure)
-		case .UploadData(_, let data):
+		case .UploadData(_, _, let data):
 			upload(self, data: data).response(closure)
 		default:
 			request(self).response(closure)

@@ -121,18 +121,27 @@ extension User {
 	}
 }
 
-extension File {
-	public static func uploadImage(data: NSData, callback: (File?, ErrorType?) -> Void) {
-		Parse.UploadData("files/pic.jpg", data).response { (json, error) in
-			if let json = json {
-				callback(File(json: Data(json)), error)
-			} else {
-				callback(nil, error)
-			}
+extension Data {
+	public func file(key: String) -> File? {
+		if let value = raw[key] as? [String: String] where value["__type"] == "File" {
+			return File(json: Data(value))
 		}
+		return nil
 	}
+}
+
+extension File {
 	public static func uploadImage(file: NSURL, callback: (File?, ErrorType?) -> Void) {
-		Parse.UploadFile("files/pic.jpg", file).response { (json, error) in
+		let path = "files/\(file.lastPathComponent!)"
+		let mime: String
+		if path.hasSuffix(".png") {
+			mime = "image/png"
+		} else if path.hasSuffix(".jpg") || path.hasSuffix(".jpeg") {
+			mime = "image/jpeg"
+		} else {
+			mime = "application/octet-stream"
+		}
+		Parse.UploadFile(path, mime, file).response { (json, error) in
 			if let json = json {
 				callback(File(json: Data(json)), error)
 			} else {

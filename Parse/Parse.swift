@@ -162,10 +162,21 @@ extension _Field where ExtractType: Hashable {
 
 extension _Field where ExtractType: ParseObject {
 	public func get(closure: (ExtractType?, ErrorType?) -> ()) {
-		if let json = json as? Pointer.RawValue, pointer = Pointer(json) {
+		if let pointer = pointer {
 			ExtractType.query().whereKey("objectId", equalTo: pointer).first(closure)
 		}
 	}
+
+	public var pointer: Pointer? {
+		if let json = json as? Pointer.RawValue {
+			return Pointer(json)
+		}
+		return nil
+	}
+}
+
+public func ==<T: ParseObject>(lhs: Field<T>, rhs: T) -> Bool {
+	return lhs.pointer?.objectId == rhs.objectId
 }
 
 extension _Field where ExtractType: _ParseType {
@@ -469,11 +480,6 @@ extension Data {
 		}
 	}
 }
-
-//extension Data: Equatable {}
-//public func ==(lhs: Data, rhs: Data) -> Bool {
-//	return lhs.objectId == rhs.objectId
-//}
 
 func ==(lhs: ParseType, rhs: ParseType) -> Bool {
 	if let left = lhs as? Date {
