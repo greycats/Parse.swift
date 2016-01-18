@@ -5,70 +5,24 @@
 //
 //
 
-public struct Parse {
-}
-
 public protocol ParseType {
 	var json: AnyObject { get }
 }
 
-protocol _ParseType: ParseType {
+public protocol _ParseType: ParseType {
 	typealias RawValue
 	init?(_ json: RawValue)
 }
 
-public protocol ParseObject {
+public protocol ParseObject: Equatable {
 	var json: Data! { get set }
 	static var className: String { get }
 	var objectId: String { get }
 	var createdAt: NSDate? { get }
 	init()
 }
-
-public protocol AnyField {
-	init(_ key: String)
-	func connect(json: Data)
-}
-
-extension ParseObject {
-	func setupFields() {
-		let mirror = Mirror(reflecting: self)
-		for (_, value) in mirror.children {
-			if let value = value as? AnyField {
-				value.connect(json)
-			}
-		}
-	}
-	init(json: Data) {
-		self.init()
-		self.json = json
-		setupFields()
-	}
-
-	public var objectId: String {
-		return json.objectId
-	}
-
-	public var createdAt: NSDate? {
-		return json.date("createdAt")?.date
-	}
-}
-
-
-public class Field<T>: AnyField {
-	private let key: String
-	private var json: ParseValue!
-	public required init(_ key: String) {
-		self.key = key
-	}
-
-	public func connect(json: Data) {
-		self.json = json[key] as! ParseValue
-	}
-
-	public func get() -> T? {
-		return json.object as? T
-	}
+public func ==<T: ParseObject>(lhs: T, rhs: T) -> Bool {
+	return lhs.objectId == rhs.objectId
 }
 
 public struct ParseValue: _ParseType {
@@ -81,7 +35,7 @@ public struct ParseValue: _ParseType {
 	public let type: Type
 	public let object: RawValue
 
-	init(_ json: RawValue) {
+	public init(_ json: RawValue) {
 		switch json {
 		case _ as String:
 			type = .String
@@ -139,6 +93,86 @@ public struct Data {
 	}
 }
 
+//MARK: ParseObject Defination
+
+public protocol AnyField {
+	var key: String { get }
+	func connect(json: Data)
+}
+
+extension ParseObject {
+	func setupFields() {
+		let mirror = Mirror(reflecting: self)
+		for (_, value) in mirror.children {
+			if let value = value as? AnyField {
+				value.connect(json)
+			}
+		}
+	}
+	init(json: Data) {
+		self.init()
+		self.json = json
+		setupFields()
+	}
+
+	public var objectId: String {
+		return json.objectId
+	}
+
+	public var security: ACL? {
+		return json.security
+	}
+
+	public var createdAt: NSDate? {
+		return json.date("createdAt")?.date
+	}
+
+	public var updatedAt: NSDate? {
+		return json.date("updatedAt")?.date
+	}
+}
+
+public protocol _Field: AnyField {
+	typealias ExtractType
+	var json: AnyObject? { get set }
+}
+
+public class Field<T>: _Field {
+	public typealias ExtractType = T
+	public let key: String
+	public var json: AnyObject?
+	public required init(_ key: String) {
+		self.key = key
+	}
+
+	public func connect(json: Data) {
+		self.json = json.raw[key]
+	}
+
+	func parseValue<T: _ParseType>() -> T? {
+		return Data.check(json)
+	}
+}
+
+extension _Field where ExtractType: Hashable {
+	public func get() -> ExtractType? {
+		return json as? ExtractType
+	}
+}
+
+extension _Field where ExtractType: ParseObject {
+	public func get(closure: (ExtractType?, ErrorType?) -> ()) {
+		if let json = json as? Pointer.RawValue, pointer = Pointer(json) {
+			ExtractType.query().whereKey("objectId", equalTo: pointer).first(closure)
+		}
+	}
+}
+
+extension _Field where ExtractType: _ParseType {
+	public func get() -> ExtractType? {
+		return Data.check(json)
+	}
+}
 
 // MARK: - Data Types
 
@@ -151,7 +185,7 @@ struct AnyWrapper: _ParseType {
 }
 
 extension Date: _ParseType {
-	typealias RawValue = [String: String]
+	public typealias RawValue = [String: String]
 
 	private static func formatter() -> NSDateFormatter {
 		let dict = NSThread.currentThread().threadDictionary
@@ -170,7 +204,7 @@ extension Date: _ParseType {
 		date = Date.formatter().dateFromString(iso)!
 	}
 
-	init?(_ json: RawValue) {
+	public init?(_ json: RawValue) {
 		if json["__type"] == "Date" {
 			date = Date.formatter().dateFromString(json["iso"]!)!
 			return
@@ -186,7 +220,7 @@ extension Date: _ParseType {
 extension Bytes: _ParseType {
 	public typealias RawValue = [String: String]
 
-	init?(_ json: RawValue) {
+	public init?(_ json: RawValue) {
 		if json["__type"] == "Bytes" {
 			bytes = NSData(base64EncodedString: json["base64"]!, options: [])!
 			return
@@ -202,7 +236,7 @@ extension Bytes: _ParseType {
 extension Pointer: _ParseType {
 	public typealias RawValue = [String: String]
 
-	init?(_ json: RawValue) {
+	public init?(_ json: RawValue) {
 		if json["__type"] == "Pointer" {
 			self.className = json["className"]! as String
 			self.objectId = json["objectId"]! as String
@@ -244,7 +278,7 @@ extension Pointer: _ParseType {
 extension GeoPoint: _ParseType {
 	public typealias RawValue = [String: NSObject]
 
-	init?(_ json: RawValue) {
+	public init?(_ json: RawValue) {
 		if let type = json["__type"] as? String {
 			if type == "GeoPoint" {
 				self.latitude = json["latitude"]! as! Double
@@ -263,7 +297,7 @@ extension GeoPoint: _ParseType {
 extension ACL: _ParseType {
 	public typealias RawValue = [String: [String: Bool]]
 
-	init?(_ json: RawValue) {
+	public init?(_ json: RawValue) {
 		var _array: [ACLRule] = []
 		for (key, value) in json {
 			var write = false
@@ -296,19 +330,19 @@ extension ACL: _ParseType {
 }
 
 extension ParseValue {
-	var int: Int? {
+	public var int: Int? {
 		return object as? Int
 	}
 
-	var double: Double {
+	public var double: Double {
 		return object as! Double
 	}
 
-	var string: String? {
+	public var string: String? {
 		return object as? String
 	}
 
-	var bool: Bool {
+	public var bool: Bool {
 		return object as! Bool
 	}
 
@@ -322,7 +356,7 @@ extension ParseValue {
 }
 
 extension Data {
-	func check<V, T: _ParseType>(value: V?, _ t: T.Type) -> T? {
+	static func check<V, T: _ParseType>(value: V?) -> T? {
 		if let value = value as? T.RawValue {
 			return T(value)
 		}
@@ -330,7 +364,7 @@ extension Data {
 	}
 
 	public func pointer(key: String) -> Pointer? {
-		return check(raw[key], Pointer.self)
+		return Data.check(raw[key])
 	}
 
 	public var keys: [String] {
@@ -343,18 +377,18 @@ extension Data {
 				return Date(iso: iso)
 			}
 		}
-		if let date = check(raw[key], Date.self) {
+		if let date: Date = Data.check(raw[key]) {
 			return date
 		}
 		return nil
 	}
 
 	public func bytes(key: String) -> Bytes? {
-		return check(raw[key], Bytes.self)
+		return Data.check(raw[key])
 	}
 
 	public func geoPoint(key: String) -> GeoPoint? {
-		return check(raw[key], GeoPoint.self)
+		return Data.check(raw[key])
 	}
 
 	public func value(key: String) -> ParseValue {
@@ -362,7 +396,7 @@ extension Data {
 	}
 
 	public var security: ACL? {
-		return check(raw["ACL"], ACL.self)
+		return Data.check(raw["ACL"])
 	}
 
 	public var objectId: String {
@@ -436,14 +470,10 @@ extension Data {
 	}
 }
 
-extension Data: Equatable {}
-public func ==(lhs: Data, rhs: Data) -> Bool {
-	return lhs.objectId == rhs.objectId
-}
-
-public func ==<T: ParseObject>(lhs: T, rhs: T) -> Bool {
-	return lhs.json.objectId == rhs.json.objectId
-}
+//extension Data: Equatable {}
+//public func ==(lhs: Data, rhs: Data) -> Bool {
+//	return lhs.objectId == rhs.objectId
+//}
 
 func ==(lhs: ParseType, rhs: ParseType) -> Bool {
 	if let left = lhs as? Date {
@@ -476,7 +506,6 @@ func <(lhs: ParseType, rhs: ParseType) -> Bool {
 }
 
 extension MutableCollectionType where Generator.Element == Data, Index == Int {
-
 	mutating func sort(keys: String?) {
 		guard let keys = keys else { return }
 		let orders = keys.componentsSeparatedByString(",")
@@ -503,94 +532,6 @@ extension MutableCollectionType where Generator.Element == Data, Index == Int {
 				}
 			}
 			return true
-		}
-	}
-}
-
-//MARK: - Relations
-
-public class Relation {
-	var cache: [Pointer] = []
-
-	func addObject(object: Pointer) {
-		removeObjectId(object.objectId)
-		cache.append(object)
-	}
-
-	func addObject<U: ParseObject>(object: U) {
-		addObject(Pointer(object: object))
-	}
-
-	func removeObjectId(object: String) {
-		cache = cache.filter { $0.objectId != object}
-	}
-
-	func contains<U: ParseObject>(object: U) -> Bool {
-		return contains(object.json.objectId)
-	}
-
-	func contains(objectId: String) -> Bool {
-		for p in cache {
-			if p.objectId == objectId {
-				return true
-			}
-		}
-		return false
-	}
-
-	var count: Int {
-		return cache.count
-	}
-}
-
-public struct Relations {
-	private static var relations: [String: (dispatch_group_t, Relation)] = [:]
-
-	public static func of<T: ParseObject, U: ParseObject>(object: T, key: String, toType: U.Type, closure: (Relation) -> Void) {
-		of(Pointer(object: object), key: key, toClass: U.className, closure: closure)
-	}
-
-	public static func of<T: ParseObject, U: ParseObject>(type: T.Type, key: String, to: U, closure: (Relation) -> Void) {
-		let mykey = "\(key)-\(T.className)-\(U.className)/\(to.json.objectId)"
-		if let (group, relation) = relations[mykey] {
-			dispatch_group_notify(group, dispatch_get_main_queue()) {
-				closure(relation)
-			}
-		} else {
-			let relation = Relation()
-			let group = dispatch_group_create()
-			relations[mykey] = (group, relation)
-			dispatch_group_enter(group)
-			Query<T>().local(false).whereKey(key, equalTo: to).getData { (data, error) in
-				relation.cache = data.map { Pointer(className: T.className, data: $0) }
-				print("caching relationship \(mykey): \(relation.cache)")
-				dispatch_group_leave(group)
-			}
-			dispatch_group_notify(group, dispatch_get_main_queue()) {
-				closure(relation)
-			}
-		}
-	}
-
-	public static func of(pointer: Pointer, key: String, toClass: String, closure: (Relation) -> Void) {
-		let mykey = "\(key)-\(pointer.className)/\(pointer.objectId)-\(toClass)"
-		if let (group, relation) = relations[mykey] {
-			dispatch_group_notify(group, dispatch_get_main_queue()) {
-				closure(relation)
-			}
-		} else {
-			let relation = Relation()
-			let group = dispatch_group_create()
-			relations[mykey] = (group, relation)
-			dispatch_group_enter(group)
-			_Query(className: toClass, constraints: .RelatedTo(key, pointer)).getData { (data, error) in
-				relation.cache = data.map { Pointer(className: toClass, data: $0) }
-				print("caching relationship \(mykey): \(relation.cache)")
-				dispatch_group_leave(group)
-			}
-			dispatch_group_notify(group, dispatch_get_main_queue()) {
-				closure(relation)
-			}
 		}
 	}
 }

@@ -68,8 +68,7 @@ extension _Query: QueryComposer {
 //MARK: - Shortcut Methods
 
 extension _Query {
-	private func getRaw(closure: ([String: AnyObject]?, ErrorType?) -> Void) {
-		if searchLocal(closure) { return }
+	private func client() -> Parse {
 		var parameters: [String: AnyObject] = [:]
 		var _where: [String: AnyObject] = [:]
 		self.composeQuery(&_where)
@@ -98,11 +97,11 @@ extension _Query {
 		}
 		let _path = path(constraints.className)
 		print("sending \(parameters) to \(_path)")
-		Client.request(.GET, _path, parameters, closure)
+		return Parse.Get(_path, parameters)
 	}
 
-	func getData(closure: ([Data], ErrorType?) -> Void) {
-		getRaw { (json, error) in
+	func data(closure: ([Data], ErrorType?) -> Void) {
+		client().response(searchLocal) { (json, error) in
 			if let json = json {
 				if let array = json["results"] as? [[String: AnyObject]] {
 					closure(array.map { Data($0) }, error)
@@ -116,7 +115,7 @@ extension _Query {
 	func count(closure: (Int, ErrorType?) -> Void) {
 		fetchesCount = true
 		limit(1)
-		getRaw { (json, error) in
+		client().response { (json, error) in
 			if let json = json {
 				if let count = json["count"] as? Int {
 					closure(count, error)
@@ -129,7 +128,7 @@ extension _Query {
 
 	func paging(group: dispatch_group_t, skip: Int = 0, block: ([[String: AnyObject]]) -> Void) {
 		dispatch_group_enter(group)
-		self.limit(1000).skip(skip).getRaw { (objects, error) in
+		limit(1000).skip(skip).client().response { (objects, error) in
 			if let objects = objects {
 				if let results = objects["results"] as? [[String: AnyObject]] {
 					if results.count == 1000 {
@@ -164,14 +163,13 @@ extension _Query {
 
 extension Query {
 	public func list(closure: ([T], ErrorType?) -> Void) {
-		getData { (data, error) in
+		data { (data, error) in
 			closure(data.map { T(json: $0) }, error)
 		}
 	}
 
 	public func first(closure: (T?, ErrorType?) -> Void) {
-		limit(1)
-		list { (ts, error) in
+		limit(1).list { (ts, error) in
 			closure(ts.first, error)
 		}
 	}
@@ -242,15 +240,31 @@ extension Operation: QueryComposer {
 	}
 }
 
+func path(className: String, objectId: String? = nil) -> String {
+	var path: String
+	switch className {
+	case "_User":
+		path = "users"
+	case "_Installation":
+		path = "installations"
+	default:
+		path = "classes/\(className)"
+	}
+	if let objectId = objectId {
+		path += "/\(objectId)"
+	}
+	return path
+}
+
 extension ObjectOperations {
-	public func update(closure: (NSError?) -> Void) {
+	public func update(closure: (ErrorType?) -> Void) {
 		var param: [String: AnyObject] = [:]
 		for operation in operations {
 			operation.composeQuery(&param)
 		}
 		let _path = path(T.className, objectId: objectId)
 		print("updating \(param) to \(_path)")
-		Client.request(.PUT, _path, param) { (json, error) in
+		Parse.Put(_path, param).response { (json, error) in
 			if let _ = json {
 				self.updateRelations()
 			}
@@ -258,9 +272,9 @@ extension ObjectOperations {
 		}
 	}
 
-	public func delete(closure: (NSError?) -> Void) {
+	public func delete(closure: (ErrorType?) -> Void) {
 		let _path = path(T.className, objectId: objectId)
-		Client.request(.DELETE, _path, [:]) { (json, error) in
+		Parse.Delete(_path, nil).response { (json, error) in
 			closure(error)
 		}
 	}
@@ -273,11 +287,11 @@ extension ClassOperations: QueryComposer {
 		}
 	}
 
-	public func save(closure: (T?, NSError?) -> Void) {
+	public func save(closure: (T?, ErrorType?) -> Void) {
 		let param = _composeQuery(self)
 		let _path = path(T.className)
 		print("saving \(param) to \(_path)")
-		Client.request(.POST, _path, param) { (json, error) in
+		Parse.Post(_path, param).response { (json, error) in
 			if let error = error {
 				closure(nil, error)
 				return

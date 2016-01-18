@@ -189,6 +189,16 @@ public class Query<T: ParseObject>: _Query {
 	}
 }
 
+extension ParseObject {
+	public static func query() -> Query<Self> {
+		return Query()
+	}
+
+	public static func relatedTo<U: ParseObject>(object: U, key: String) -> Query<Self> {
+		return query().relatedTo(object, key: key)
+	}
+}
+
 public func ||<T>(left: Query<T>, right: Query<T>) -> Query<T> {
 	return Query<T>(constraints: .Or(left.constraints, right.constraints))
 }

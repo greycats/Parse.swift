@@ -18,7 +18,7 @@ public enum Operation {
 	case DeleteColumn(String)
 }
 
-public class _Operations<T: ParseObject> {
+public class _Operations {
 	var operations: [Operation]
 
 	init(operations: [Operation]) {
@@ -26,13 +26,13 @@ public class _Operations<T: ParseObject> {
 	}
 }
 
-public class ClassOperations<T: ParseObject>: _Operations<T> {
+public class ClassOperations<T: ParseObject>: _Operations {
 	public init() {
 		super.init(operations: [])
 	}
 }
 
-public class ObjectOperations<T: ParseObject>: _Operations<T> {
+public class ObjectOperations<T: ParseObject>: _Operations {
 	let objectId: String
 
 	public init(_ objectId: String, operations: [Operation]) {
@@ -47,11 +47,11 @@ extension ObjectOperations {
 		for operation in operations {
 			switch operation {
 			case .AddRelation(let key, let pointer):
-				Relations.of(this, key: key, toClass: pointer.className) { (relation) in
+				RelationsCache.of(this, key: key, toClass: pointer.className) { (relation) in
 					relation.addObject(pointer)
 				}
 			case .RemoveRelation(let key, let pointer):
-				Relations.of(this, key: key, toClass: pointer.className) { (relation) in
+				RelationsCache.of(this, key: key, toClass: pointer.className) { (relation) in
 					relation.removeObjectId(pointer.objectId)
 				}
 			default:
@@ -62,30 +62,14 @@ extension ObjectOperations {
 }
 
 extension ParseObject {
-	public func operation() -> ObjectOperations<Self> {
+	private func _operation() -> ObjectOperations<Self> {
 		return ObjectOperations(objectId, operations: [])
 	}
 
-	public static func query() -> Query<Self> {
-		return Query()
-	}
-
-	public func addRelation<U: ParseObject>(key: String, to: U) -> ObjectOperations<Self> {
-		return operation().addRelation(key, to: to)
-	}
-	public func removeRelation<U: ParseObject>(key: String, to: U) -> ObjectOperations<Self> {
-		return operation().removeRelation(key, to: to)
-	}
-
-	public static func relatedTo<U: ParseObject>(object: U, key: String) -> Query<Self> {
-		return query().relatedTo(object, key: key)
-	}
-}
-
-extension Parse {
-	public static func operation<T: ParseObject>(on on: T) -> ObjectOperations<T> {
-		let operations = ObjectOperations<T>(on.json.objectId, operations: [])
-		if let pending = on.json.pending {
+	public func operation() -> ObjectOperations<Self> {
+		let operations = _operation()
+		//TODO
+		if let pending = json.pending {
 			for (key, value) in pending {
 				switch value {
 				case let v as ParseValue:
@@ -100,6 +84,17 @@ extension Parse {
 			}
 		}
 		return operations
+	}
+
+	public static func operation() -> ClassOperations<Self> {
+		return ClassOperations()
+	}
+
+	public func addRelation<U: ParseObject>(key: String, to: U) -> ObjectOperations<Self> {
+		return operation().addRelation(key, to: to)
+	}
+	public func removeRelation<U: ParseObject>(key: String, to: U) -> ObjectOperations<Self> {
+		return operation().removeRelation(key, to: to)
 	}
 }
 

@@ -334,7 +334,7 @@ private struct ObjectCache {
 			dispatch_source_set_event_handler(t) {
 				let checkouts = self.retrivePending(T.self)
 				let objectIds = checkouts.map { ParseValue($0.objectId) }
-				_Query(className: T.className, constraints: .In("objectId", objectIds)).getData { (jsons, error) in
+				_Query(className: T.className, constraints: .In("objectId", objectIds)).data { (jsons, error) in
 					for (objectId, closure) in checkouts {
 						for json in jsons {
 							if json.objectId == objectId {
@@ -345,6 +345,94 @@ private struct ObjectCache {
 						}
 					}
 				}
+			}
+		}
+	}
+}
+
+//MARK: - Relations
+
+public class ManyToMany {
+	var cache: [Pointer] = []
+
+	func addObject(object: Pointer) {
+		removeObjectId(object.objectId)
+		cache.append(object)
+	}
+
+	func addObject<U: ParseObject>(object: U) {
+		addObject(Pointer(object: object))
+	}
+
+	func removeObjectId(object: String) {
+		cache = cache.filter { $0.objectId != object}
+	}
+
+	func contains<U: ParseObject>(object: U) -> Bool {
+		return contains(object.json.objectId)
+	}
+
+	func contains(objectId: String) -> Bool {
+		for p in cache {
+			if p.objectId == objectId {
+				return true
+			}
+		}
+		return false
+	}
+
+	var count: Int {
+		return cache.count
+	}
+}
+
+public struct RelationsCache {
+	private static var relations: [String: (dispatch_group_t, ManyToMany)] = [:]
+
+	public static func of<T: ParseObject, U: ParseObject>(object: T, key: String, toType: U.Type, closure: (ManyToMany) -> Void) {
+		of(Pointer(object: object), key: key, toClass: U.className, closure: closure)
+	}
+
+	public static func of<T: ParseObject, U: ParseObject>(type: T.Type, key: String, to: U, closure: (ManyToMany) -> Void) {
+		let mykey = "\(key)-\(T.className)-\(U.className)/\(to.json.objectId)"
+		if let (group, relation) = relations[mykey] {
+			dispatch_group_notify(group, dispatch_get_main_queue()) {
+				closure(relation)
+			}
+		} else {
+			let relation = ManyToMany()
+			let group = dispatch_group_create()
+			relations[mykey] = (group, relation)
+			dispatch_group_enter(group)
+			Query<T>().local(false).whereKey(key, equalTo: to).data { (data, error) in
+				relation.cache = data.map { Pointer(className: T.className, data: $0) }
+				print("caching relationship \(mykey): \(relation.cache)")
+				dispatch_group_leave(group)
+			}
+			dispatch_group_notify(group, dispatch_get_main_queue()) {
+				closure(relation)
+			}
+		}
+	}
+
+	public static func of(pointer: Pointer, key: String, toClass: String, closure: (ManyToMany) -> Void) {
+		let mykey = "\(key)-\(pointer.className)/\(pointer.objectId)-\(toClass)"
+		if let (group, relation) = relations[mykey] {
+			dispatch_group_notify(group, dispatch_get_main_queue()) {
+				closure(relation)
+			}
+		} else {
+			let relation = ManyToMany()
+			let group = dispatch_group_create()
+			relations[mykey] = (group, relation)
+			dispatch_group_enter(group)
+			_Query(className: toClass, constraints: .RelatedTo(key, pointer)).data { (data, error) in
+				relation.cache = data.map { Pointer(className: toClass, data: $0) }
+				print("caching relationship \(mykey): \(relation.cache)")
+				dispatch_group_leave(group)
+			}
+			dispatch_group_notify(group, dispatch_get_main_queue()) {
+				closure(relation)
 			}
 		}
 	}

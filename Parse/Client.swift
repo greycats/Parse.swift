@@ -1,5 +1,5 @@
 //
-//  Client.swift
+//  Parse.swift
 //  Parse
 //
 //  Created by Rex Sheng on 1/15/16.
@@ -9,93 +9,83 @@
 import Alamofire
 typealias Method = Alamofire.Method
 
-public let ParseErrorDomain = "co.interactivelabs.parse"
-
+public enum ParseError: ErrorType {
+	case SessionFailure
+	case UncategorizedError(code: Int, message: String)
+}
 
 //MARK: - Dispatch
 
+public typealias Response = ([String: AnyObject]?, ErrorType?) -> ()
 var clientCreated = false
+public enum Parse: URLRequestConvertible {
+	private static var hostPrefix: String!
+	private static var parseHeaders: [String: String]!
+	private static var token: String?
 
-public struct Client {
-	static var manager_init_group: dispatch_group_t = {
-		clientCreated = true
+	case Get(String, [String: AnyObject]?)
+	case Post(String, [String: AnyObject]?)
+	case Put(String, [String: AnyObject]?)
+	case Delete(String, [String: AnyObject]?)
+	case UploadData(String, NSData)
+	case UploadFile(String, NSURL)
 
-		var group = dispatch_group_create()
-		dispatch_group_enter(group)
-		return group
-	}()
-
-	static var manager: Manager?
-
-	static func request(method: Method, _ path: String, _ parameters: [String: AnyObject]?, _ closure: ([String: AnyObject]?, NSError?) -> Void) {
-		let pathString = "https://api.parse.com/1\(path)"
-		var encoding: ParameterEncoding
+	public var URLRequest: NSMutableURLRequest {
+		let _parameters: [String: AnyObject]?
+		var method: Alamofire.Method = .POST
+		let _path: String
+		switch self {
+		case .Get(let path, let parameters):
+			_path = path
+			method = .GET
+			_parameters = parameters
+		case .Put(let path, let parameters):
+			_path = path
+			method = .PUT
+			_parameters = parameters
+		case .Post(let path, let parameters):
+			_path = path
+			_parameters = parameters
+		case .Delete(let path, let parameters):
+			_path = path
+			method = .DELETE
+			_parameters = parameters
+		case .UploadData(let path, _):
+			_path = path
+			method = .POST
+			_parameters = nil
+		case .UploadFile(let path, _):
+			_path = path
+			method = .POST
+			_parameters = nil
+		}
+		let encoding: Alamofire.ParameterEncoding
 		switch method {
 		case .POST, .PUT:
 			encoding = .JSON
 		default:
 			encoding = .URL
 		}
-		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) {
-			let request = self.manager!.request(method, pathString, parameters: parameters, encoding: encoding)
-			request.responseJSON { res in
-				if let object = res.result.value as? [String: AnyObject] {
-					if object["error"] != nil && object["code"] != nil {
-						closure(nil, NSError(domain: ParseErrorDomain, code: object["code"] as! Int, userInfo: [NSLocalizedDescriptionKey: object["error"] as! String]))
-						return
-					}
-					closure(object, res.result.error)
-				} else {
-					closure(nil, res.result.error)
-				}
-			}
-			return
-		}
-	}
 
-	static func request(method: Method, _ path: String, _ data: NSData, _ closure: ([String: AnyObject]?, NSError?) -> Void) {
-		let pathString = "https://api.parse.com/1\(path)"
-		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) { () -> Void in
-			let request = self.manager!.upload(method, pathString, data: data)
-			request.responseJSON(options: []) { res in
-				if let object = res.result.value as? [String: AnyObject] {
-					if object["error"] != nil && object["code"] != nil {
-						closure(nil, NSError(domain: ParseErrorDomain, code: object["code"] as! Int, userInfo: [NSLocalizedDescriptionKey: object["error"] as! String]))
-						return
-					}
-					closure(object, res.result.error)
-				} else {
-					closure(nil, res.result.error)
-				}
-			}
+		let URL = NSURL(string: Parse.hostPrefix)!
+		let URLRequest = NSMutableURLRequest(URL: URL.URLByAppendingPathComponent(_path))
+		URLRequest.HTTPMethod = method.rawValue
+		for (k, v) in Parse.parseHeaders {
+			URLRequest.setValue(v, forHTTPHeaderField: k)
 		}
-	}
-
-	static func updateSession(token: String?) {
-		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) {
-			if var headers = self.manager!.session.configuration.HTTPAdditionalHeaders {
-				headers["X-Parse-Session-Token"] = token
-				self.manager!.session.configuration.HTTPAdditionalHeaders = headers
-			}
+		if let token = Parse.token {
+			URLRequest.setValue(token, forHTTPHeaderField: "X-Parse-Session-Token")
 		}
-	}
-
-	static func loginSession(token: String, block: (NSError?) -> Void) {
-		updateSession(token)
-		dispatch_group_notify(manager_init_group, dispatch_get_main_queue()) {
-			self.request(.GET, "/users/me", nil) { (json, error) in
-				block(error)
-			}
-		}
+		return encoding.encode(URLRequest, parameters: _parameters).0
 	}
 
 	public static func setup(applicationId applicationId: String, restKey: String?, masterKey: String? = nil) {
-		let configuration = NSURLSessionConfiguration.defaultSessionConfiguration()
-		var headers = ["X-Parse-Application-Id": applicationId]
+		hostPrefix = "https://api.parse.com/1/"
+		parseHeaders = ["X-Parse-Application-Id": applicationId]
 		if let restKey = restKey {
-			headers["X-Parse-REST-API-Key"] = restKey
+			parseHeaders["X-Parse-REST-API-Key"] = restKey
 		} else if let masterKey = masterKey {
-			headers["X-Parse-Master-Key"] = masterKey
+			parseHeaders["X-Parse-Master-Key"] = masterKey
 		}
 		var userDefaults: NSUserDefaults
 		#if TARGET_IS_EXTENSION
@@ -105,37 +95,59 @@ public struct Client {
 		#endif
 		if let object = userDefaults.objectForKey("user") as? [String: AnyObject] {
 			if let token = object["sessionToken"] as? String {
-				headers["X-Parse-Session-Token"] = token
+				parseHeaders["X-Parse-Session-Token"] = token
 			}
 		}
-		configuration.HTTPAdditionalHeaders = headers
-		self.manager = Manager(configuration: configuration)
-		dispatch_group_leave(manager_init_group)
 	}
 
-	public static func trackAppOpen() {
-		request(.POST, "/events/AppOpened", [:]) { (json, error) in
-			print("trackAppOpen error = \(error)")
+	public static func updateSession(token: String?) {
+		self.token = token
+	}
+
+	public func one<T: ParseObject>(closure: (T?, ErrorType?) -> ()) {
+		response { json, error in
+			if let json = json {
+				closure(T(json: Data(json)), error)
+			} else {
+				closure(nil, error)
+			}
+		}
+	}
+
+	public func response(injector: Response -> Bool, closure: Response) {
+		if injector(closure) { return }
+		request(self).response(closure)
+	}
+
+	public func response(closure: ([String: AnyObject]?, ErrorType?) -> ()) {
+		switch self {
+		case .UploadFile(_, let data):
+			upload(self, file: data).response(closure)
+		case .UploadData(_, let data):
+			upload(self, data: data).response(closure)
+		default:
+			request(self).response(closure)
 		}
 	}
 }
 
-func path(className: String, objectId: String? = nil) -> String {
-	var path: String
-	switch className {
-	case "_User":
-		path = "/users"
-	case "_Installation":
-		path = "/installations"
-	default:
-		path = "/classes/\(className)"
+extension Alamofire.Request {
+
+	private func response(closure: ([String: AnyObject]?, ErrorType?) -> ()) {
+		responseJSON { response in
+			if let object = response.result.value as? [String: AnyObject] {
+				if object["error"] != nil && object["code"] != nil {
+					closure(nil, ParseError.UncategorizedError(code: object["code"] as! Int, message: object["error"] as! String))
+					return
+				}
+				closure(object, response.result.error)
+			} else {
+				closure(nil, response.result.error)
+			}
+		}
 	}
-	if let objectId = objectId {
-		path += "/\(objectId)"
-	}
-	return path
 }
 
-public func parseFunction(name: String, parameters: [String: AnyObject], done: ([String: AnyObject]?, NSError?) -> Void) {
-	Client.request(.POST, "/functions/\(name)", parameters, done)
+public func parseFunction(name: String, parameters: [String: AnyObject], done: ([String: AnyObject]?, ErrorType?) -> Void) {
+	Parse.Post("functions/\(name)", parameters).response(done)
 }
