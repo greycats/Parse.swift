@@ -97,14 +97,10 @@ extension User {
 		Parse.Post("logout", nil).response { _ in }
 	}
 
-	public static func signUp(username: String, password: String, extraInfo: [String: ComparableKeyType]? = nil, callback: (User?, ErrorType?) -> Void) {
+	public static func signUp(username: String, password: String, @noescape extraInfoBuilder: ClassOperations<User> -> () = {_ in}, callback: (User?, ErrorType?) -> Void) {
 		Parse.updateSession(nil)
 		let o = operation().set("username", value: username).set("password", value: password)
-		if let info = extraInfo {
-			for (k, v) in info {
-				o.set(k, value: v)
-			}
-		}
+		extraInfoBuilder(o)
 		o.save { (user, error) in
 			if let user = user {
 				user.persist(callback)
@@ -126,6 +122,18 @@ extension Data {
 }
 
 extension File {
+	public static func uploadJPEGImage(data: NSData, callback: (File?, ErrorType?) -> Void) {
+		let path = "files/image.jpg"
+		let mime = "image/jpeg"
+		Parse.UploadData(path, mime, data).response { (json, error) in
+			if let json = json {
+				callback(File(json: Data(json)), error)
+			} else {
+				callback(nil, error)
+			}
+		}
+	}
+
 	public static func uploadImage(file: NSURL, callback: (File?, ErrorType?) -> Void) {
 		let path = "files/\(file.lastPathComponent!)"
 		let mime: String
