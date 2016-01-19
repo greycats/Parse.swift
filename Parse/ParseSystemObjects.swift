@@ -6,7 +6,7 @@
 //  Copyright (c) 2015 Rex Sheng. All rights reserved.
 //
 
-//public protocol 
+//public protocol
 public struct User: ParseObject {
 	public static let className = "_User"
 	public var json: Data!
@@ -31,17 +31,7 @@ public struct File: ParseObject {
 
 extension User {
 	public static var currentUser: User? {
-		var userDefaults: NSUserDefaults
-		#if TARGET_IS_EXTENSION
-			userDefaults = NSUserDefaults(suiteName: APPGROUP_USER)!
-		#else
-			userDefaults = NSUserDefaults.standardUserDefaults()
-		#endif
-		if let object = userDefaults.objectForKey("user") as? [String: AnyObject] {
-			let user = User(json: Data(object))
-			return user
-		}
-		return nil
+		return load()
 	}
 
 	public static func currentUser(block: (User?, ErrorType?) -> Void) {
@@ -60,27 +50,40 @@ extension User {
 		block(nil, nil)
 	}
 
+	private static func load() -> User? {
+		var userDefaults: NSUserDefaults
+		#if TARGET_IS_EXTENSION
+			userDefaults = NSUserDefaults(suiteName: APPGROUP_USER)!
+		#else
+			userDefaults = NSUserDefaults.standardUserDefaults()
+		#endif
+		if let object = userDefaults.objectForKey("user") as? [String: AnyObject] {
+			return User(json: Data(object))
+		}
+		return nil
+	}
+
+	private func persist(callback: (User?, ErrorType?) -> ()) {
+		if let token = json.value("sessionToken").string {
+			NSUserDefaults.standardUserDefaults().setObject(json.raw, forKey: "user")
+			NSUserDefaults.standardUserDefaults().synchronize()
+			//					let defaults = NSUserDefaults(suiteName: APPGROUP_USER)
+			//					defaults?.setObject(json, forKey: "user")
+			Parse.updateSession(token)
+			print("logIn user \(json)")
+			callback(self, nil)
+		} else {
+			callback(nil, ParseError.SessionFailure)
+		}
+	}
+
 	public static func logIn(username: String, password: String, callback: (User?, ErrorType?) -> Void) {
 		Parse.updateSession(nil)
-		Parse.Get("login", ["username": username, "password": password]).response { (json, error) in
-			if let error = error {
-				return callback(nil, error)
-			}
-			if let json = json {
-				let user = User(json: Data(json))
-				if let token = user.json.value("sessionToken").string {
-					NSUserDefaults.standardUserDefaults().setObject(json, forKey: "user")
-					NSUserDefaults.standardUserDefaults().synchronize()
-					//					let defaults = NSUserDefaults(suiteName: APPGROUP_USER)
-					//					defaults?.setObject(json, forKey: "user")
-					Parse.updateSession(token)
-					print("logIn user \(json)")
-					dispatch_async(dispatch_get_main_queue()) {
-						callback(user, nil)
-					}
-				} else {
-					callback(nil, ParseError.SessionFailure)
-				}
+		Parse.Get("login", ["username": username, "password": password]).one { (user: User?, error) in
+			if let user = user {
+				user.persist(callback)
+			} else {
+				callback(nil, error)
 			}
 		}
 	}
@@ -104,18 +107,10 @@ extension User {
 		}
 		o.save { (user, error) in
 			if let user = user {
-				if let token = user.json.value("sessionToken").string {
-					NSUserDefaults.standardUserDefaults().setObject(user.json.raw, forKey: "user")
-					NSUserDefaults.standardUserDefaults().synchronize()
-					Parse.updateSession(token)
-					print("signUp user \(user)")
-					callback(user, error)
-				} else {
-					self.logIn(username, password: password, callback: callback)
-				}
+				user.persist(callback)
 			} else {
 				print("error \(error)")
-				return callback(nil, error)
+				callback(nil, error)
 			}
 		}
 	}

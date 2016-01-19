@@ -96,7 +96,6 @@ extension _Query {
 			parameters["count"] = 1
 		}
 		let _path = path(constraints.className)
-		print("sending \(parameters) to \(_path)")
 		return Parse.Get(_path, parameters)
 	}
 
@@ -234,6 +233,8 @@ extension Operation: QueryComposer {
 				ACLRule(name: "*", write: false, read: true),
 				ACLRule(name: objectId, write: true, read: true)])
 			param["ACL"] = acl.json
+		case .ClearSecurity:
+			param["ACL"] = ACL(rules: [ACLRule(name: "*", write: true, read: true)]).json
 		case .DeleteColumn(let key):
 			param[key] = ["__op": "Delete"]
 		}

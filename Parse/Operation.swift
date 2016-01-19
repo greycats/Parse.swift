@@ -15,6 +15,7 @@ public enum Operation {
 	case AddRelation(String, Pointer)
 	case RemoveRelation(String, Pointer)
 	case SetSecurity(String)
+	case ClearSecurity
 	case DeleteColumn(String)
 }
 
