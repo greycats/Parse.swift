@@ -102,8 +102,8 @@ extension User {
 		let o = operation().set("username", value: username).set("password", value: password)
 		extraInfoBuilder(o)
 		o.save { (user, error) in
-			if let user = user {
-				user.persist(callback)
+			if let _ = user {
+				logIn(username, password: password, callback: callback)
 			} else {
 				print("error \(error)")
 				callback(nil, error)
