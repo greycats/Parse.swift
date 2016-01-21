@@ -92,6 +92,19 @@ struct LocalCache {
 		}
 	}
 
+	func data(objectId: String) -> Data? {
+		if let data = LocalPersistence.classCache[className]?.data(objectId) {
+			return data
+		}
+		if let cache = loadCache() {
+			if let results = cache["results"] as? [String: AnyObject],
+				let raw = results[objectId] as? [String: AnyObject] {
+					return Data(raw)
+			}
+		}
+		return nil
+	}
+
 	func append(dom: Data) {
 		if let cache = loadCache() {
 			var results = cache["results"] as! [String: AnyObject]
@@ -295,7 +308,8 @@ extension _Query {
 //MARK: Cache
 
 private struct ObjectCache {
-	static var timers: [String: (dispatch_source_t, [(objectId: String, closure: Data -> Void)])] = [:]
+	typealias Timer = (objectId: String, callback: Data -> Void)
+	static var timers: [String: (dispatch_source_t, [Timer])] = [:]
 
 	static func timer(key: String) -> dispatch_source_t {
 		if let timer = timers[key] {
@@ -307,7 +321,7 @@ private struct ObjectCache {
 		return timer
 	}
 
-	static func retrivePending<T: ParseObject>(type: T.Type) -> [(objectId: String, closure: Data -> Void)] {
+	static func retrivePending<T: ParseObject>(type: T.Type) -> [Timer] {
 		if let (timer, pending) = timers[T.className] {
 			let checkouts = pending
 			timers[T.className] = (timer, [])
@@ -316,30 +330,30 @@ private struct ObjectCache {
 		return []
 	}
 
-	static func appendClosure<T: ParseObject>(objectId: String, closure: (T) -> Void) {
+	static func appendCallback<T: ParseObject>(objectId: String, callback: (T) -> Void) {
 		if let (timer, pending) = timers[T.className] {
 			var _pending = pending
-			_pending.append((objectId: objectId, closure: { closure(T(json: $0)) }))
+			_pending.append((objectId: objectId, callback: { callback(T(json: $0)) }))
 			timers[T.className] = (timer, pending)
 		}
 	}
 
-	static func get<T: ParseObject>(objectId: String, rush: Double = 0.25, closure: (T) -> Void) {
+	static func get<T: ParseObject>(objectId: String, rush: Double = 0.25, callback: (T) -> Void) {
 		if let object = LocalPersistence.data(Pointer(className: T.className, objectId: objectId)) {
-			return closure(T(json: object))
+			return callback(T(json: object))
 		} else {
 			let t = timer(T.className)
-			appendClosure(objectId, closure: closure)
+			appendCallback(objectId, callback: callback)
 			dispatch_source_set_timer(t, dispatch_time(DISPATCH_TIME_NOW, Int64(rush * Double(NSEC_PER_SEC))), DISPATCH_TIME_FOREVER, 0)
 			dispatch_source_set_event_handler(t) {
-				let checkouts = self.retrivePending(T.self)
-				let objectIds = checkouts.map { ParseValue($0.objectId) }
+				let pending = self.retrivePending(T.self)
+				let objectIds = pending.map { ParseValue($0.objectId) }
 				_Query(className: T.className, constraints: .In("objectId", objectIds)).data { (jsons, error) in
-					for (objectId, closure) in checkouts {
+					for (objectId, callback) in pending {
 						for json in jsons {
 							if json.objectId == objectId {
 								LocalPersistence.appendData(json, pointer: Pointer(className: T.className, objectId: objectId))
-								closure(json)
+								callback(json)
 								break
 							}
 						}
@@ -443,7 +457,7 @@ extension ParseObject {
 		LocalCache(className: className).persistent(maxAge, done: done)
 	}
 
-	public static func get(objectId: String, closure: (Self) -> ()) {
-		ObjectCache.get(objectId, closure: closure)
+	public static func get(objectId: String, callback: (Self) -> ()) {
+		ObjectCache.get(objectId, callback: callback)
 	}
 }

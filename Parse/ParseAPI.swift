@@ -263,10 +263,24 @@ extension ObjectOperations {
 		for operation in operations {
 			operation.composeQuery(&param)
 		}
+
 		let _path = path(T.className, objectId: objectId)
 		print("updating \(param) to \(_path)")
 		Parse.Put(_path, param).response { (json, error) in
-			if let _ = json {
+			if let json = json {
+				let cache = LocalCache(className: T.className)
+				if var data = cache.data(self.objectId)?.raw {
+					for operation in self.operations {
+						switch operation {
+						case .SetValue(let key, let args):
+							data[key] = args.json
+						default:
+							break
+						}
+					}
+					data["updatedAt"] = json["updatedAt"]
+					cache.append(Data(data))
+				}
 				self.updateRelations()
 			}
 			closure(error)
