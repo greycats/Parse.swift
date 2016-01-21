@@ -160,7 +160,7 @@ struct LocalCache {
 
 		dispatch_group_notify(group, dispatch_get_main_queue()) {
 			LocalPersistence.classCache[self.className] = ClassCache(inner: jsons)
-			print("\(self.className) ready")
+			print("\(self.className) ready count=\(cache.count)")
 			let json: [String: AnyObject] = [
 				"time": NSDate.timeIntervalSinceReferenceDate(),
 				"results": cache,

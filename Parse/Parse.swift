@@ -98,14 +98,15 @@ public struct Data {
 public protocol AnyField {
 	var key: String { get }
 	func connect(json: Data)
+	var pending: Operation? { get set }
 }
 
 extension ParseObject {
 	func setupFields() {
 		let mirror = Mirror(reflecting: self)
-		for (_, value) in mirror.children {
-			if let value = value as? AnyField {
-				value.connect(json)
+		for (_, field) in mirror.children {
+			if let field = field as? AnyField {
+				field.connect(json)
 			}
 		}
 	}
@@ -130,6 +131,18 @@ extension ParseObject {
 	public var updatedAt: NSDate? {
 		return json.date("updatedAt")?.date
 	}
+
+	public func update(closure: (ErrorType?) -> ()) {
+		let o = operation()
+		let mirror = Mirror(reflecting: self)
+		for (_, field) in mirror.children {
+			if var field = field as? AnyField, let pending = field.pending {
+				o.operation(pending)
+				field.pending = nil
+			}
+		}
+		o.update(closure)
+	}
 }
 
 public protocol _Field: AnyField {
@@ -141,6 +154,7 @@ public class Field<T>: _Field {
 	public typealias ExtractType = T
 	public let key: String
 	public var json: AnyObject?
+	public var pending: Operation?
 	public required init(_ key: String) {
 		self.key = key
 	}
@@ -151,6 +165,20 @@ public class Field<T>: _Field {
 
 	func parseValue<T: _ParseType>() -> T? {
 		return Data.check(json)
+	}
+}
+
+extension Field {
+	public func set<U: ParseType>(value: U) {
+		pending = Operation.SetValue(key, value)
+	}
+
+	public func set<U: Hashable>(value: U) {
+		pending = Operation.SetValue(key, ParseValue(value as? AnyObject))
+	}
+
+	public func set<U: ParseObject>(value: U) {
+		pending = _Operations.convertToOperation(key, value: value)
 	}
 }
 

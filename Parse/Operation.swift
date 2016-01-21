@@ -100,6 +100,13 @@ extension ParseObject {
 }
 
 extension _Operations {
+	static func convertToOperation<U: ParseObject>(key: String, value: U) -> Operation {
+		if let file = value as? File, name = file.name.get() {
+			return .SetValue(key, AnyWrapper(["name": name, "__type": "File"]))
+		}
+		return .SetValue(key, Pointer(object: value))
+	}
+
 	public func operation(operation: Operation) -> Self {
 		operations.append(operation)
 		return self
@@ -117,10 +124,7 @@ extension _Operations {
 	}
 
 	public func set<U: ParseObject>(key: String, value: U) -> Self {
-		if let file = value as? File, name = file.name.get() {
-			return operation(.SetValue(key, AnyWrapper(["name": name, "__type": "File"])))
-		}
-		return operation(.SetValue(key, Pointer(object: value)))
+		return operation(_Operations.convertToOperation(key, value: value))
 	}
 
 	public func set<U: ParseType>(key: String, value: U) -> Self {
