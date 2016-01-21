@@ -23,11 +23,8 @@ it, simply add the following line to your Podfile:
     // or MasterKey
     Parse.setup(applicationId: "<# your application id #>", masterKey: "<# master key #>")
 
-    // then you can sync with your models to local, or not
-    // you can create your model as class or struct
     // Models natually have objectId, createdAt, updatedAt and security fields. And File, User, Installation, Push models are already defined for you.
-
-    guard let me = User.currentUser else { return }
+    // You can create your model as class or struct
 
     struct Document: ParseObject {
     	static let className = "Document"
@@ -37,11 +34,18 @@ it, simply add the following line to your Podfile:
     	let description = Field<String>("description")
     	let author = Field<User>("author")
     }
-
-    // you can optionally pre-load all documents to file, and queries later on will be performed locally instead of remotely.
+    
+    // To log in user
+    User.logIn("username", password: "password") { user, error in
+    }
+    
+    // Let us assume user is already logged in in this snippet
+    guard let me = User.currentUser else { return }
+    
+    // you can optionally pre-load all documents to file, and queries later on will be performed locally as much as possible.
     Document.persistent(86400)
 
-    // to perform a query, for more query options, see Query.swift
+    // to perform a query
     Document.query().list { documents, error in
         ...
     }
@@ -50,6 +54,7 @@ it, simply add the following line to your Podfile:
             print(document.title.get())
         }
     }
+    // for more query options, see Query.swift
 
     // to perform an update or curation
     Document.opertation().set("author", value: me).save { document, error in 
