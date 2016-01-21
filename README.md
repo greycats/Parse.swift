@@ -5,107 +5,74 @@
 [![License](https://img.shields.io/cocoapods/l/SwiftyParse.svg?style=flat)](http://cocoadocs.org/docsets/SwiftyParse)
 [![Platform](https://img.shields.io/cocoapods/p/SwiftyParse.svg?style=flat)](http://cocoadocs.org/docsets/SwiftyParse)
 
-## Usage
-
-```swift
-import Parse
-
-Client.setup(applicationId: "<# your application id #>", restKey: "<# rest key #>")
-
-// then you can sync with your models to local, or not
-
-let authors = Parse<Author>().persistent(maxAge: 86400)
-
-class Author: ParseObject {
-    class var className: String { return "authors"}
-    
-    var json: Data?
-    
-    // you can link properies
-    var createdAt: NSDate
-    var firstName: String? {
-    	return json?.value("first_name").string
-    }
-    
-    required init(json: Data) {
-        self.json = json
-        createdAt = json.date("createdAt")
-    }
-    
-    func documents(closure: ([Document], NSError?) -> Void) {
-        Query<Document>().whereKey("author", equalTo: self).get(closure)
-    }
-}
-
-class Document: ParseObject {
-    class var className: String { return "documents"}
-    
-    var json: Data?
-   
-    required init(json: Data) {
-        self.json = json
-    }
-
-    class func search(term: NSRegularExpression, then: ([Document], NSError?) -> Void) {
-    	// defaults to local search
-        documents.query().local(false).whereKey("title", match: term).order("-downloaded,name").limit(50).get(then)
-    }
-
-    class func documentsByAuthorName(firstName: String, last_name: String, birth: Int, then: ([Document], NSError?) -> Void) {
-        let firstNameQuery = authors.query()
-            .whereKey("first_name", equalTo: firstName)
-            .whereKey("birth", greaterThan: birth)
-        let lastNameQuery = authors.query()
-            .whereKey("last_name", equalTo: lastName)
-            .whereKey("birth", greaterThan: birth)
-        let authorQuery = firstNameQuery || lastNameQuery
-        Query<Document>().whereKey("author_id", matchKey: "id", inQuery: authorQuery).get(then)
-    }
-}
-```
-
-To replace author_id with author reference:
-```swift
-func convertBoard<T: ParseObject>(group: dispatch_group_t, type: T.Type) {
-	Query<T>().whereKey("author_id", exists: true).each(group, concurrent: 4) { (json, complete) in
-		let json = Data(raw: json)
-		Query<Author>().whereKey("id", equalTo: json.value("author_id").string!).first { (author, error) in
-			let oid = json.objectId
-			if let author = author {
-				Parse<T>.operation(oid, operations: .DeleteColumn("author_id"))
-					.set("author", value: author).update { (json, error) in
-						println("json = \(json) \(error)")
-						complete()
-				}
-			} else {
-				Parse<T>.operation(oid).delete { (error) in
-					println("delete \(T.className) met error \(error)")
-					complete()
-				}
-			}
-		}
-	}
-}
-```
-
-* with `persistent` phrase, authors will sync to local (your document directory), with defined primary key and max expire age. After then, all queries / subqueries to author, will be using local data if possible.
-* you can use swift infix operators `||` on queries
-* `ParseObject` is a simple protocol. (You can use struct as you like)
-* save / update / relation / pointer queries all using generic types
-* automatically sync relationship to local, and update when add/remove relations
-
-## Requirements
-
-Alamofire
-
-if you are targeting iOS7, I suggest you to grab the source code and comment out `import Alamofire`, yeah, and copy Alamofire to your project.
-
 ## Installation
 
 SwiftyParse is available through [CocoaPods](http://cocoapods.org). To install
 it, simply add the following line to your Podfile:
 
     pod "SwiftyParse"
+
+
+## Usage
+
+```swift
+    import SwiftyParse
+
+    // first of all, set up Parse using RestKey
+    Parse.setup(applicationId: "<# your application id #>", restKey: "<# rest key #>")
+    // or MasterKey
+    Parse.setup(applicationId: "<# your application id #>", masterKey: "<# master key #>")
+
+    // then you can sync with your models to local, or not
+    // you can create your model as class or struct
+    // Models natually have objectId, createdAt, updatedAt and security fields. And File, User, Installation, Push models are already defined for you.
+
+    guard let me = User.currentUser else { return }
+
+    struct Document: ParseObject {
+    	static let className = "Document"
+    	var json: Data!
+    	init() {}
+    	let title = Field<String>("title")
+    	let description = Field<String>("description")
+    	let author = Field<User>("author")
+    }
+
+    // you can optionally pre-load all documents to file, and queries later on will be performed locally instead of remotely.
+    Document.persistent(86400)
+
+    // to perform a query, for more query options, see Query.swift
+    Document.query().list { documents, error in
+        ...
+    }
+    Document.query().local(false).order("-updatedAt,title").relatedTo(me, key: "master_piece").list { documents, error in
+        for document in documents {
+            print(document.title.get())
+        }
+    }
+
+    // to perform an update or curation
+    Document.opertation().set("author", value: me).save { document, error in 
+        if let document = document {
+            document.title.set("SwiftyParse")
+            document.update { error in
+                ...
+            }
+        }
+    }
+
+    // and much more features you can discover
+    let firstNameQuery = User.query().whereKey("first_name", equalTo: firstName).whereKey("birth", greaterThan: birth)
+    let lastNameQuery = User.query().whereKey("last_name", equalTo: lastName).whereKey("birth", greaterThan: birth)
+    let authorQuery = firstNameQuery || lastNameQuery
+    Document.query().whereKey("author", matchKey: "id", inQuery: authorQuery).get { documents, error in
+        for document in documents {
+            document.operation().setSecurity(me).update { _ in }
+        }
+    }
+    ```
+    
+Operations are affecting data in local storage too.
 
 ## Author
 

@@ -88,14 +88,23 @@ public enum Parse: URLRequestConvertible {
 		return req
 	}
 
-	public static func setup(applicationId applicationId: String, restKey: String?, masterKey: String? = nil) {
+	public static func setup(applicationId applicationId: String, restKey: String) {
 		hostPrefix = "https://api.parse.com/1/"
-		parseHeaders = ["X-Parse-Application-Id": applicationId]
-		if let restKey = restKey {
-			parseHeaders["X-Parse-REST-API-Key"] = restKey
-		} else if let masterKey = masterKey {
-			parseHeaders["X-Parse-Master-Key"] = masterKey
-		}
+		parseHeaders = [
+			"X-Parse-Application-Id": applicationId,
+			"X-Parse-REST-API-Key": restKey]
+		loadLastSession()
+	}
+
+	public static func setup(applicationId applicationId: String, masterKey: String) {
+		hostPrefix = "https://api.parse.com/1/"
+		parseHeaders = [
+			"X-Parse-Application-Id": applicationId,
+			"X-Parse-Master-Key": masterKey]
+		loadLastSession()
+	}
+
+	private static func loadLastSession() {
 		var userDefaults: NSUserDefaults
 		#if TARGET_IS_EXTENSION
 			userDefaults = NSUserDefaults(suiteName: APPGROUP_USER)!
@@ -103,9 +112,7 @@ public enum Parse: URLRequestConvertible {
 			userDefaults = NSUserDefaults.standardUserDefaults()
 		#endif
 		if let object = userDefaults.objectForKey("user") as? [String: AnyObject] {
-			if let token = object["sessionToken"] as? String {
-				parseHeaders["X-Parse-Session-Token"] = token
-			}
+			updateSession(object["sessionToken"] as? String)
 		}
 	}
 
