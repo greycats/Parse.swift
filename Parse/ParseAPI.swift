@@ -268,7 +268,24 @@ extension _Operations: QueryComposer {
 		let param = _composeQuery(self)
 		let _path = path(className, objectId: objectId)
 		print("updating \(param) to \(_path)")
-		Parse.Put(_path, param).response(closure)
+		Parse.Put(_path, param).response { (json, error) in
+			if let json = json {
+				let cache = LocalCache(className: className)
+				if var data = cache.data(objectId)?.raw {
+					for operation in self.operations {
+						switch operation {
+						case .SetValue(let key, let args):
+							data[key] = args.json
+						default:
+							break
+						}
+					}
+					data["updatedAt"] = json["updatedAt"]
+					cache.append(Data(data))
+				}
+			}
+			closure(json, error)
+		}
 	}
 
 	public func delete(className: String, objectId: String, closure: (ErrorType?) -> Void) {
@@ -282,27 +299,25 @@ extension _Operations: QueryComposer {
 		let param = _composeQuery(self)
 		let _path = path(className)
 		print("saving \(param) to \(_path)")
-		Parse.Post(_path, param).response(closure)
+		Parse.Post(_path, param).response { (json, error) in
+			if let json = json {
+				var object = param
+				object["createdAt"] = json["createdAt"]
+				object["objectId"] = json["objectId"]
+				let data = Data(object)
+				LocalCache(className: className).append(data)
+				closure(object, nil)
+			} else {
+				closure(nil, error)
+			}
+		}
 	}
 }
 
 extension ObjectOperations {
 	public func update(closure: (ErrorType?) -> Void) {
 		update(T.className, objectId: objectId) { (json, error) in
-			if let json = json {
-				let cache = LocalCache(className: T.className)
-				if var data = cache.data(self.objectId)?.raw {
-					for operation in self.operations {
-						switch operation {
-						case .SetValue(let key, let args):
-							data[key] = args.json
-						default:
-							break
-						}
-					}
-					data["updatedAt"] = json["updatedAt"]
-					cache.append(Data(data))
-				}
+			if let _ = json {
 				self.updateRelations()
 			}
 			closure(error)
@@ -315,20 +330,12 @@ extension ObjectOperations {
 }
 
 extension ClassOperations {
-
 	public func save(closure: (T?, ErrorType?) -> Void) {
 		save(T.className) { (json, error) in
-			if let error = error {
-				closure(nil, error)
-				return
-			}
 			if let json = json {
-				var object = param
-				object["createdAt"] = json["createdAt"]
-				object["objectId"] = json["objectId"]
-				let data = Data(object)
-				LocalCache(className: T.className).append(data)
-				closure(T(json: data), nil)
+				closure(T(json: Data(json)), nil)
+			} else {
+				closure(nil, error)
 			}
 		}
 	}

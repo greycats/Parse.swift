@@ -79,7 +79,7 @@ User.logIn("username", password: "password") { user, error in
 ```
 Operations are affecting data in local storage too.
 
-### Low-Level Queries
+### Low-Level Queries/Operations
 
 For some reason, you might want to stick with plain queries and JSON, here is what you can do:
 
@@ -87,7 +87,9 @@ For some reason, you might want to stick with plain queries and JSON, here is wh
 let group = dispatch_group_create()
 let author = Pointer(className: "_User", objectId: 1234abcd")
 _Query(className: "Document", constraints: .EqualTo("author", author)).each(group) { (json: [String: AnyObject]) in
-	_Operations(operations: [.ClearSecurity]).
+	guard let objectId = json["objectId"] as? String else { return }
+	_Operations(operations: [.ClearSecurity]).update("Document", objectId: objectId) { _ in
+	}
 }
 // By using 'each', you can iterate over every record of every pages
 dispatch_group_notify(group, ...)
