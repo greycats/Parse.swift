@@ -69,17 +69,34 @@ User.logIn("username", password: "password") { user, error in
 	let firstNameQuery = User.query().whereKey("first_name", equalTo: firstName).whereKey("birth", greaterThan: birth)
 	let lastNameQuery = User.query().whereKey("last_name", equalTo: lastName).whereKey("birth", greaterThan: birth)
 	let authorQuery = firstNameQuery || lastNameQuery
-	Document.query().whereKey("author", matchKey: "id", inQuery: authorQuery).get { documents, error in
+	Document.query().whereKey("author", matchKey: "id", inQuery: authorQuery).list { documents, error in
 	    for document in documents {
 	        document.operation().setSecurity(me).update { _ in }
 	    }
 	}
 }
 
+```
+Operations are affecting data in local storage too.
+
+### Low-Level Queries
+
+For some reason, you might want to stick with plain queries and JSON, here is what you can do:
+
+```swift
+let group = dispatch_group_create()
+let author = Pointer(className: "_User", objectId: 1234abcd")
+_Query(className: "Document", constraints: .EqualTo("author", author)).each(group) { json in
+	...
+}
+// By using `each`, you can iterate over every record of every pages
+dispatch_group_notify(group, ...)
 
 ```
-    
-Operations are affecting data in local storage too.
+
+## Notice
+
+I disabled "Require revocable sessions" in the Parse app settings to get logIn/signUp worked properly. Contribution is welcome.
 
 ## Author
 
