@@ -1,3 +1,6 @@
 language: swift
 xcode_workspace: Parse.xcworkspace
 xcode_scheme: Parse
+rvm: 2.0.0
+before_install:
+  - gem install cocoapods -v '0.39.0'
