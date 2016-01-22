@@ -86,10 +86,10 @@ For some reason, you might want to stick with plain queries and JSON, here is wh
 ```swift
 let group = dispatch_group_create()
 let author = Pointer(className: "_User", objectId: 1234abcd")
-_Query(className: "Document", constraints: .EqualTo("author", author)).each(group) { json in
-	...
+_Query(className: "Document", constraints: .EqualTo("author", author)).each(group) { (json: [String: AnyObject]) in
+	_Operations(operations: [.ClearSecurity]).
 }
-// By using `each`, you can iterate over every record of every pages
+// By using 'each', you can iterate over every record of every pages
 dispatch_group_notify(group, ...)
 
 ```

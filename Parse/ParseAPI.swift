@@ -257,16 +257,38 @@ func path(className: String, objectId: String? = nil) -> String {
 	return path
 }
 
-extension ObjectOperations {
-	public func update(closure: (ErrorType?) -> Void) {
-		var param: [String: AnyObject] = [:]
+extension _Operations: QueryComposer {
+	func composeQuery(inout param: [String : AnyObject]) {
 		for operation in operations {
 			operation.composeQuery(&param)
 		}
+	}
 
-		let _path = path(T.className, objectId: objectId)
+	public func update(className: String, objectId: String, closure: ([String: AnyObject]?, ErrorType?) -> Void) {
+		let param = _composeQuery(self)
+		let _path = path(className, objectId: objectId)
 		print("updating \(param) to \(_path)")
-		Parse.Put(_path, param).response { (json, error) in
+		Parse.Put(_path, param).response(closure)
+	}
+
+	public func delete(className: String, objectId: String, closure: (ErrorType?) -> Void) {
+		let _path = path(className, objectId: objectId)
+		Parse.Delete(_path, nil).response { (json, error) in
+			closure(error)
+		}
+	}
+
+	public func save(className: String, closure: ([String: AnyObject]?, ErrorType?) -> Void) {
+		let param = _composeQuery(self)
+		let _path = path(className)
+		print("saving \(param) to \(_path)")
+		Parse.Post(_path, param).response(closure)
+	}
+}
+
+extension ObjectOperations {
+	public func update(closure: (ErrorType?) -> Void) {
+		update(T.className, objectId: objectId) { (json, error) in
 			if let json = json {
 				let cache = LocalCache(className: T.className)
 				if var data = cache.data(self.objectId)?.raw {
@@ -288,25 +310,14 @@ extension ObjectOperations {
 	}
 
 	public func delete(closure: (ErrorType?) -> Void) {
-		let _path = path(T.className, objectId: objectId)
-		Parse.Delete(_path, nil).response { (json, error) in
-			closure(error)
-		}
+		delete(T.className, objectId: objectId, closure: closure)
 	}
 }
 
-extension ClassOperations: QueryComposer {
-	func composeQuery(inout param: [String : AnyObject]) {
-		for operation in operations {
-			operation.composeQuery(&param)
-		}
-	}
+extension ClassOperations {
 
 	public func save(closure: (T?, ErrorType?) -> Void) {
-		let param = _composeQuery(self)
-		let _path = path(T.className)
-		print("saving \(param) to \(_path)")
-		Parse.Post(_path, param).response { (json, error) in
+		save(T.className) { (json, error) in
 			if let error = error {
 				closure(nil, error)
 				return
