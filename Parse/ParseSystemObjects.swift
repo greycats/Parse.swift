@@ -97,7 +97,7 @@ extension User {
 		Parse.Post("logout", nil).response { _ in }
 	}
 
-	public static func signUp(username: String, password: String, @noescape extraInfoBuilder: ClassOperations<User> -> () = {_ in}, callback: (User?, ErrorType?) -> Void) {
+	public static func signUp(username: String, password: String, @noescape extraInfoBuilder: Operations<User> -> () = {_ in}, callback: (User?, ErrorType?) -> Void) {
 		Parse.updateSession(nil)
 		let o = operation().set("username", value: username).set("password", value: password)
 		extraInfoBuilder(o)
@@ -167,7 +167,7 @@ extension RelationsCache {
 	}
 }
 
-extension ClassOperations {
+extension Operations {
 	public func setSecurity(readwrite: User) -> Self {
 		return operation(.SetSecurity(readwrite.objectId))
 	}
@@ -192,7 +192,7 @@ extension NSData {
 extension Installation {
 	static var currentInstallation: Installation?
 
-	public static func register(deviceToken: NSData, channels: [String], otherInfo: ((ClassOperations<Installation>) -> Void)? = nil) {
+	public static func register(deviceToken: NSData, channels: [String], otherInfo: ((Operations<Installation>) -> Void)? = nil) {
 		let op = operation()
 			.set("deviceType", value: "ios")
 			.set("deviceToken", value: deviceToken.hexadecimalString)
@@ -208,7 +208,7 @@ extension Installation {
 
 	public static func clearBadge() {
 		if let installation = Installation.currentInstallation {
-			installation.operation().set("badge", value: 0).update { _ in }
+			installation.operation().set("badge", value: 0).save { _ in }
 		}
 	}
 }

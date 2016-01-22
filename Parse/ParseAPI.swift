@@ -314,29 +314,43 @@ extension _Operations: QueryComposer {
 	}
 }
 
-extension ObjectOperations {
-	public func update(closure: (ErrorType?) -> Void) {
-		update(T.className, objectId: objectId) { (json, error) in
-			if let _ = json {
-				self.updateRelations()
-			}
-			closure(error)
-		}
+extension Operations {
+	public func delete(closure: (ErrorType?) -> Void) {
+		delete(T.className, objectId: object.objectId, closure: closure)
 	}
 
-	public func delete(closure: (ErrorType?) -> Void) {
-		delete(T.className, objectId: objectId, closure: closure)
+	public func save(closure: (T?, ErrorType?) -> Void) {
+		if let objectId = object.objectId {
+			update(T.className, objectId: objectId) { (json, error) in
+				if let _ = json {
+					self.updateRelations()
+					closure(self.object, nil)
+				} else {
+					closure(nil, error)
+				}
+			}
+		} else {
+			save(T.className) { (json, error) in
+				if let json = json {
+					closure(T(json: Data(json)), nil)
+				} else {
+					closure(nil, error)
+				}
+			}
+		}
 	}
 }
 
-extension ClassOperations {
-	public func save(closure: (T?, ErrorType?) -> Void) {
-		save(T.className) { (json, error) in
-			if let json = json {
-				closure(T(json: Data(json)), nil)
-			} else {
-				closure(nil, error)
+extension ParseObject {
+	public func save(closure: (Self?, ErrorType?) -> ()) {
+		let o = operation()
+		let mirror = Mirror(reflecting: self)
+		for (_, field) in mirror.children {
+			if var field = field as? AnyField, let pending = field.pending {
+				o.operation(pending)
+				field.pending = nil
 			}
 		}
+		o.save(closure)
 	}
 }

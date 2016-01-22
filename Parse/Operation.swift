@@ -27,24 +27,18 @@ public class _Operations {
 	}
 }
 
-public class ClassOperations<T: ParseObject>: _Operations {
-	public init() {
-		super.init(operations: [])
-	}
-}
+public class Operations<T: ParseObject>: _Operations {
+	let object: T
 
-public class ObjectOperations<T: ParseObject>: _Operations {
-	let objectId: String
-
-	public init(_ objectId: String, operations: [Operation]) {
-		self.objectId = objectId
+	public init(_ object: T, operations: [Operation]) {
+		self.object = object
 		super.init(operations: operations)
 	}
 }
 
-extension ObjectOperations {
+extension Operations {
 	func updateRelations() {
-		let this = Pointer(className: T.className, objectId: objectId)
+		let this = Pointer(className: T.className, objectId: object.objectId)
 		for operation in operations {
 			switch operation {
 			case .AddRelation(let key, let pointer):
@@ -63,38 +57,18 @@ extension ObjectOperations {
 }
 
 extension ParseObject {
-	private func _operation() -> ObjectOperations<Self> {
-		return ObjectOperations(objectId, operations: [])
+	public func operation() -> Operations<Self> {
+		return Operations(self, operations: [])
 	}
 
-	public func operation() -> ObjectOperations<Self> {
-		let operations = _operation()
-		//TODO
-		if let pending = json.pending {
-			for (key, value) in pending {
-				switch value {
-				case let v as ParseValue:
-					operations.set(key, value: v)
-				case let p as Pointer:
-					operations.set(key, value: p)
-				case let d as Date:
-					operations.set(key, value: d)
-				default:
-					break
-				}
-			}
-		}
-		return operations
+	public static func operation() -> Operations<Self> {
+		return Self().operation()
 	}
 
-	public static func operation() -> ClassOperations<Self> {
-		return ClassOperations()
-	}
-
-	public func addRelation<U: ParseObject>(key: String, to: U) -> ObjectOperations<Self> {
+	public func addRelation<U: ParseObject>(key: String, to: U) -> Operations<Self> {
 		return operation().addRelation(key, to: to)
 	}
-	public func removeRelation<U: ParseObject>(key: String, to: U) -> ObjectOperations<Self> {
+	public func removeRelation<U: ParseObject>(key: String, to: U) -> Operations<Self> {
 		return operation().removeRelation(key, to: to)
 	}
 }

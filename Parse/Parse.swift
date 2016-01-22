@@ -17,7 +17,7 @@ public protocol _ParseType: ParseType {
 public protocol ParseObject: Equatable {
 	var json: Data! { get set }
 	static var className: String { get }
-	var objectId: String { get }
+	var objectId: String! { get }
 	var createdAt: NSDate? { get }
 	init()
 }
@@ -87,7 +87,6 @@ public struct ACL {
 
 public struct Data {
 	let raw: [String: AnyObject]
-	var pending: [String: ParseType]?
 	public init(_ raw: [String: AnyObject]) {
 		self.raw = raw
 	}
@@ -116,8 +115,11 @@ extension ParseObject {
 		setupFields()
 	}
 
-	public var objectId: String {
-		return json.objectId
+	public var objectId: String! {
+		if let objectId = json?.objectId {
+			return objectId
+		}
+		return nil
 	}
 
 	public var security: ACL? {
@@ -130,18 +132,6 @@ extension ParseObject {
 
 	public var updatedAt: NSDate? {
 		return json.date("updatedAt")?.date
-	}
-
-	public func update(closure: (ErrorType?) -> ()) {
-		let o = operation()
-		let mirror = Mirror(reflecting: self)
-		for (_, field) in mirror.children {
-			if var field = field as? AnyField, let pending = field.pending {
-				o.operation(pending)
-				field.pending = nil
-			}
-		}
-		o.update(closure)
 	}
 }
 
@@ -438,7 +428,7 @@ extension Data {
 		return Data.check(raw["ACL"])
 	}
 
-	public var objectId: String {
+	public var objectId: String! {
 		return value("objectId").string!
 	}
 }
@@ -500,11 +490,6 @@ extension Data {
 				return d
 			}
 			return value(key)
-		}
-		set {
-			var _pending = pending ?? [:]
-			_pending[key] = newValue
-			pending = _pending
 		}
 	}
 }

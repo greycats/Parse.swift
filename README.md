@@ -59,7 +59,7 @@ User.logIn("username", password: "password") { user, error in
 		if let document = document {
 			// update this document with new title
 			document.title.set("SwiftyParse")
-			document.update { error in
+			document.save { error in
 	            ...
 	       }
 	   }
@@ -71,7 +71,7 @@ User.logIn("username", password: "password") { user, error in
 	let authorQuery = firstNameQuery || lastNameQuery
 	Document.query().whereKey("author", matchKey: "id", inQuery: authorQuery).list { documents, error in
 	    for document in documents {
-	        document.operation().setSecurity(me).update { _ in }
+	        document.operation().setSecurity(me).save { _ in }
 	    }
 	}
 }
