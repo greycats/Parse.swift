@@ -190,6 +190,9 @@ extension Constraint: LocalMatch {
 			let string = json.value(key).string!
 			return regexp.firstMatchInString(string, options: [], range: NSMakeRange(0, string.characters.count)) != nil
 		case .In(let key, let keys):
+			if let pointer = json.pointer(key) {
+				return keys.contains(ParseValue(pointer.objectId))
+			}
 			return keys.contains(json.value(key))
 		case .NotIn(let key, let keys):
 			return !keys.contains(json.value(key))
@@ -263,7 +266,8 @@ extension _Query {
 			dispatch_barrier_async(LocalPersistence.local_search_queue) {
 				self.constraints.replaceSubQueries { (key, constraints) in
 					if let innerCache = LocalPersistence.classCache[constraints.className]?.inner {
-						return innerCache.filter { constraints.match($0) }.map { $0.value(key) }
+						let filtered = innerCache.filter { constraints.match($0) }
+						return filtered.map { $0.value(key) }
 					} else {
 						return []
 					}

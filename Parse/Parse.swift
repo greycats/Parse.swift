@@ -316,6 +316,15 @@ extension Pointer: _ParseType {
 	}
 }
 
+extension Pointer: Equatable {}
+public func ==(lhs: Pointer, rhs: Pointer) -> Bool {
+	return lhs.className == rhs.className && lhs.objectId == rhs.objectId
+}
+
+public func ==<T: ParseObject>(lhs: T, rhs: Pointer) -> Bool {
+	return T.className == rhs.className && lhs.objectId == rhs.objectId
+}
+
 extension GeoPoint: _ParseType {
 	public typealias RawValue = [String: NSObject]
 
@@ -445,7 +454,6 @@ extension Data {
 	}
 }
 
-
 @objc public protocol ComparableKeyType: NSObjectProtocol {}
 extension NSDate: ComparableKeyType {}
 extension NSNumber: ComparableKeyType {}
@@ -501,6 +509,9 @@ extension Data {
 			if let d = date(key) {
 				return d
 			}
+			if let p = pointer(key) {
+				return p
+			}
 			return value(key)
 		}
 	}
@@ -509,6 +520,12 @@ extension Data {
 func ==(lhs: ParseType, rhs: ParseType) -> Bool {
 	if let left = lhs as? Date {
 		if let right = rhs as? Date {
+			return left == right
+		}
+		return false
+	}
+	if let left = lhs as? Pointer {
+		if let right = rhs as? Pointer {
 			return left == right
 		}
 		return false
