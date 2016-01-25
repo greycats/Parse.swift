@@ -159,15 +159,23 @@ public class Field<T>: _Field {
 }
 
 extension Field {
-	public func set<U: ParseType>(value: U) {
-		pending = Operation.SetValue(key, value)
+	public func set<U: ParseType>(value: U?) {
+		if let value = value {
+			pending = Operation.SetValue(key, value)
+		} else {
+			pending = Operation.SetValue(key, ParseValue(nil))
+		}
 	}
 
-	public func set<U: Hashable>(value: U) {
-		pending = Operation.SetValue(key, ParseValue(value as? AnyObject))
+	public func set<U: Hashable>(value: U?) {
+		if let value = value as? AnyObject {
+			pending = Operation.SetValue(key, ParseValue(value))
+		} else {
+			pending = Operation.SetValue(key, ParseValue(nil))
+		}
 	}
 
-	public func set<U: ParseObject>(value: U) {
+	public func set<U: ParseObject>(value: U?) {
 		pending = _Operations.convertToOperation(key, value: value)
 	}
 }
@@ -193,8 +201,12 @@ extension _Field where ExtractType: ParseObject {
 	}
 }
 
-public func ==<T: ParseObject>(lhs: Field<T>, rhs: T) -> Bool {
-	return lhs.pointer?.objectId == rhs.objectId
+public func !=<T: ParseObject>(lhs: Field<T>, rhs: T?) -> Bool {
+	return lhs.pointer?.objectId != rhs?.objectId
+}
+
+public func ==<T: ParseObject>(lhs: Field<T>, rhs: T?) -> Bool {
+	return lhs.pointer?.objectId == rhs?.objectId
 }
 
 extension _Field where ExtractType: _ParseType {

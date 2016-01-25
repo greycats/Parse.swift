@@ -269,7 +269,8 @@ extension _Operations: QueryComposer {
 		let _path = path(className, objectId: objectId)
 		print("updating \(param) to \(_path)")
 		Parse.Put(_path, param).response { (json, error) in
-			if let json = json {
+			var mutated = json
+			if let json = mutated {
 				let cache = LocalCache(className: className)
 				if var data = cache.data(objectId)?.raw {
 					for operation in self.operations {
@@ -281,10 +282,11 @@ extension _Operations: QueryComposer {
 						}
 					}
 					data["updatedAt"] = json["updatedAt"]
+					mutated = data
 					cache.append(Data(data))
 				}
 			}
-			closure(json, error)
+			closure(mutated, error)
 		}
 	}
 
@@ -322,9 +324,9 @@ extension Operations {
 	public func save(closure: (T?, ErrorType?) -> Void) {
 		if let objectId = object.objectId {
 			update(T.className, objectId: objectId) { (json, error) in
-				if let _ = json {
+				if let json = json {
 					self.updateRelations()
-					closure(self.object, nil)
+					closure(T(json: Data(json)), nil)
 				} else {
 					closure(nil, error)
 				}

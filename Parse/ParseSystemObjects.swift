@@ -29,6 +29,18 @@ public struct File: ParseObject {
 	public init() {}
 }
 
+public struct Config {
+	public static func get(closure: [String: AnyObject] -> ()) {
+		Parse.Get("config", nil).response { (data, error) in
+			if let data = data {
+				closure(data)
+			} else {
+				closure([:])
+			}
+		}
+	}
+}
+
 extension User {
 	public static var currentUser: User? {
 		return load()
