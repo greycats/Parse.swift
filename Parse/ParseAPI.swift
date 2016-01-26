@@ -264,7 +264,7 @@ extension _Operations: QueryComposer {
 		}
 	}
 
-	public func update(className: String, objectId: String, closure: ([String: AnyObject]?, ErrorType?) -> Void) {
+	public func update(className: String, objectId: String, closure: ([String: AnyObject]?, ErrorType?) -> Void) -> [String: AnyObject] {
 		let param = _composeQuery(self)
 		let _path = path(className, objectId: objectId)
 		print("updating \(param) to \(_path)")
@@ -288,6 +288,7 @@ extension _Operations: QueryComposer {
 			}
 			closure(mutated, error)
 		}
+		return param
 	}
 
 	public func delete(className: String, objectId: String, closure: (ErrorType?) -> Void) {
@@ -297,7 +298,7 @@ extension _Operations: QueryComposer {
 		}
 	}
 
-	public func save(className: String, closure: ([String: AnyObject]?, ErrorType?) -> Void) {
+	public func save(className: String, closure: ([String: AnyObject]?, ErrorType?) -> Void) -> [String: AnyObject] {
 		let param = _composeQuery(self)
 		let _path = path(className)
 		print("saving \(param) to \(_path)")
@@ -313,6 +314,7 @@ extension _Operations: QueryComposer {
 				closure(nil, error)
 			}
 		}
+		return param
 	}
 }
 
@@ -321,9 +323,9 @@ extension Operations {
 		delete(T.className, objectId: object.objectId, closure: closure)
 	}
 
-	public func save(closure: (T?, ErrorType?) -> Void) {
+	public func save(closure: (T?, ErrorType?) -> Void) -> [String: AnyObject] {
 		if let objectId = object.objectId {
-			update(T.className, objectId: objectId) { (json, error) in
+			return update(T.className, objectId: objectId) { (json, error) in
 				if let json = json {
 					self.updateRelations()
 					closure(T(json: Data(json)), nil)
@@ -332,7 +334,7 @@ extension Operations {
 				}
 			}
 		} else {
-			save(T.className) { (json, error) in
+			return save(T.className) { (json, error) in
 				if let json = json {
 					closure(T(json: Data(json)), nil)
 				} else {
@@ -344,7 +346,7 @@ extension Operations {
 }
 
 extension ParseObject {
-	public func save(closure: (Self?, ErrorType?) -> ()) {
+	public func save(closure: (Self?, ErrorType?) -> ()) -> [String: AnyObject] {
 		let o = operation()
 		let mirror = Mirror(reflecting: self)
 		for (_, field) in mirror.children {
@@ -353,6 +355,6 @@ extension ParseObject {
 				field.pending = nil
 			}
 		}
-		o.save(closure)
+		return o.save(closure)
 	}
 }
