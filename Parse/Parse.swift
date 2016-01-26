@@ -109,7 +109,8 @@ extension ParseObject {
 			}
 		}
 	}
-	init(json: Data) {
+	
+	public init(json: Data) {
 		self.init()
 		self.json = json
 		setupFields()

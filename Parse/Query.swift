@@ -69,9 +69,8 @@ public class _Query {
 	}
 
 	public func whereKey<U: ParseObject>(key: String, equalTo object: U) -> Self {
-		let objectId = object.json.objectId
 		if key == "objectId" {
-			return constraint(.EqualTo(key, ParseValue(objectId)))
+			return constraint(.EqualTo(key, ParseValue(object.objectId)))
 		} else {
 			return constraint(.EqualTo(key, Pointer(object: object)))
 		}
