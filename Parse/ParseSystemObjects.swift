@@ -32,7 +32,7 @@ public struct File: ParseObject {
 public struct Config {
 	public static func get(closure: [String: AnyObject] -> ()) {
 		Parse.Get("config", nil).response { (data, error) in
-			if let data = data {
+			if let data = data?["params"] as? [String: AnyObject] {
 				closure(data)
 			} else {
 				closure([:])
