@@ -110,12 +110,6 @@ extension ParseObject {
 		}
 	}
 	
-	public init(json: Data) {
-		self.init()
-		self.json = json
-		setupFields()
-	}
-
 	public var objectId: String! {
 		if let objectId = json?.objectId {
 			return objectId
@@ -455,10 +449,10 @@ extension Data {
 	}
 }
 
-@objc public protocol ComparableKeyType: NSObjectProtocol {}
-extension NSDate: ComparableKeyType {}
-extension NSNumber: ComparableKeyType {}
-extension NSString: ComparableKeyType {}
+@objc public protocol ParseValueLiteralConvertible: NSObjectProtocol {}
+extension NSDate: ParseValueLiteralConvertible {}
+extension NSNumber: ParseValueLiteralConvertible {}
+extension NSString: ParseValueLiteralConvertible {}
 
 extension Pointer {
 	subscript(key: String) -> Pointer {

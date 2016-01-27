@@ -269,24 +269,7 @@ extension _Operations: QueryComposer {
 		let _path = path(className, objectId: objectId)
 		print("updating \(param) to \(_path)")
 		Parse.Put(_path, param).response { (json, error) in
-			var mutated = json
-			if let json = mutated {
-				let cache = LocalCache(className: className)
-				if var data = cache.data(objectId)?.raw {
-					for operation in self.operations {
-						switch operation {
-						case .SetValue(let key, let args):
-							data[key] = args.json
-						default:
-							break
-						}
-					}
-					data["updatedAt"] = json["updatedAt"]
-					mutated = data
-					cache.append(Data(data))
-				}
-			}
-			closure(mutated, error)
+			closure(json, error)
 		}
 		return param
 	}
@@ -307,8 +290,6 @@ extension _Operations: QueryComposer {
 				var object = param
 				object["createdAt"] = json["createdAt"]
 				object["objectId"] = json["objectId"]
-				let data = Data(object)
-				LocalCache(className: className).append(data)
 				closure(object, nil)
 			} else {
 				closure(nil, error)
@@ -325,10 +306,24 @@ extension Operations {
 
 	public func save(closure: (T?, ErrorType?) -> Void) -> [String: AnyObject] {
 		if let objectId = object.objectId {
+			var data = object.json.raw
+			for operation in operations {
+				switch operation {
+				case .SetValue(let key, let args):
+					data[key] = args.json
+				default:
+					break
+				}
+			}
 			return update(T.className, objectId: objectId) { (json, error) in
 				if let json = json {
+					data["updatedAt"] = json["updatedAt"]
+					let object = T(json: Data(data))
+					if let object = object as? Cache {
+						object.persist(enlist: false)
+					}
 					self.updateRelations()
-					closure(T(json: Data(json)), nil)
+					closure(object, nil)
 				} else {
 					closure(nil, error)
 				}
@@ -336,7 +331,11 @@ extension Operations {
 		} else {
 			return save(T.className) { (json, error) in
 				if let json = json {
-					closure(T(json: Data(json)), nil)
+					let object = T(json: Data(json))
+					if let object = object as? Cache {
+						object.persist(enlist: true)
+					}
+					closure(object, nil)
 				} else {
 					closure(nil, error)
 				}

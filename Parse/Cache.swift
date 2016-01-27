@@ -8,166 +8,137 @@
 
 //MARK: - Local Search & Cache
 
-private struct ClassCache {
-	var inner: [Data] = []
+public protocol Cache {
+	static var expireAfter: NSTimeInterval { get }
+	func persist(enlist enlist: Bool)
+}
 
-	func data(objectId: String) -> Data? {
-		for rec in inner {
-			if rec.objectId == objectId {
-				return rec
-			}
-		}
-		return nil
+public struct CachedObjectsGenerator<T: ParseObject where T: Cache>: CollectionType {
+	public typealias Index = Int
+	public var startIndex: Int { return 0 }
+	public var endIndex: Int { return list.count }
+	public subscript(i: Int) -> T {
+		return T.load(list[i])!
 	}
+	let list: [String]
+}
 
-	mutating func appendData(data: Data) {
-		var appended = false
-		for i in 0..<inner.count {
-			if inner[i].objectId == data.objectId {
-				inner[i] = data
-				appended = true
-			}
-		}
-		if !appended {
-			inner.append(data)
-		}
-	}
+let cacheHome = NSSearchPathForDirectoriesInDomains(.CachesDirectory, .UserDomainMask, true).first
 
-	mutating func removeData(data: Data) {
-		for i in 0..<inner.count {
-			if inner[i].objectId == data.objectId {
-				defer {
-					inner.removeAtIndex(i)
-				}
-			}
+extension ParseObject {
+	init(json: Data, cache: Bool = true) {
+		self.init()
+		self.json = json
+		if let this = self as? Cache where cache {
+			this.persist(enlist: false)
 		}
+		setupFields()
 	}
 }
 
-private struct LocalPersistence {
-	static var classCache: [String: ClassCache] = [:]
-	static let local_search_queue = dispatch_queue_create(nil, DISPATCH_QUEUE_CONCURRENT)
-
-	static func data(pointer: Pointer) -> Data? {
-		if let recs = classCache[pointer.className] {
-			return recs.data(pointer.objectId)
+private func _loadJSON(folder: String, key: String, expireAfter: NSTimeInterval) -> AnyObject? {
+	if let filePath = cacheHome?.stringByAppendingString("/\(folder)/\(key)") {
+		if let attr = try? NSFileManager.defaultManager().attributesOfItemAtPath(filePath),
+			lastModified = attr[NSFileModificationDate] as? NSDate {
+				if lastModified.timeIntervalSinceNow < -expireAfter {
+					return nil
+				}
 		}
-		return nil
-	}
-
-	static func appendData(data: Data, pointer: Pointer) {
-		if classCache[pointer.className] == nil {
-			classCache[pointer.className] = ClassCache()
+		if let data = NSData(contentsOfFile: filePath),
+			let object = try? NSJSONSerialization.JSONObjectWithData(data, options: []) {
+				return object
 		}
-		classCache[pointer.className]?.appendData(data)
 	}
+	return nil
 }
 
-struct LocalCache {
-	let className: String
-
-	func loadCache() -> [String: AnyObject]? {
-		let key = "v3.\(className).json"
-		let paths = NSSearchPathForDirectoriesInDomains(.DocumentDirectory, .UserDomainMask, true)
-		if let root = paths.first {
-			let file = root.stringByAppendingString("/\(key)")
-			if let data = NSData(contentsOfFile: file) {
-				print("loading from file \(file)")
-				if let json = (try? NSJSONSerialization.JSONObjectWithData(data, options: .AllowFragments)) as? [String: AnyObject] {
-					return json
-				}
-			}
-		}
-		return nil
+extension ParseObject where Self: Cache {
+	private static func loadJSON(key: String, expireAfter: NSTimeInterval) -> AnyObject? {
+		return _loadJSON(className, key: key, expireAfter: expireAfter)
 	}
 
-	func writeCache(json: [String: AnyObject]) {
-		let key = "v3.\(className).json"
-		let paths = NSSearchPathForDirectoriesInDomains(.DocumentDirectory, .UserDomainMask, true)
-		if let root = paths.first {
-			let file = root.stringByAppendingString("/\(key)")
-			(try? NSJSONSerialization.dataWithJSONObject(json, options: []))?
-				.writeToFile(file, atomically: true)
-			print("\(className) data wrote to \(file)")
+	private static func saveJSON(json: AnyObject, toPath: String) throws {
+		if let folder = cacheHome?.stringByAppendingString("/\(className)") {
+			try NSFileManager.defaultManager().createDirectoryAtPath(folder, withIntermediateDirectories: true, attributes: nil)
+			let filePath = "\(folder)/\(toPath)"
+			let data = try NSJSONSerialization.dataWithJSONObject(json, options: [])
+			data.writeToFile(filePath, atomically: false)
 		}
 	}
 
-	func data(objectId: String) -> Data? {
-		if let data = LocalPersistence.classCache[className]?.data(objectId) {
-			return data
+	public static func list(closure: ([Self]) -> ()) {
+		if let generator = generate() {
+			let objects = generator.map { $0 }
+			closure(objects)
+			print("hit cache count: \(objects.count)")
+			return
 		}
-		if let cache = loadCache() {
-			if let results = cache["results"] as? [String: AnyObject],
-				let raw = results[objectId] as? [String: AnyObject] {
-					return Data(raw)
-			}
-		}
-		return nil
-	}
 
-	func append(dom: Data) {
-		if let cache = loadCache() {
-			var results = cache["results"] as! [String: AnyObject]
-			results[dom.objectId] = dom.raw
-			LocalPersistence.classCache[className]?.appendData(dom)
-			let json: [String: AnyObject] = [
-				"time": NSDate.timeIntervalSinceReferenceDate(),
-				"results": results,
-				"class": className]
-			writeCache(json)
-		}
-	}
-
-	func remove(dom: Data) {
-		if let cache = loadCache() {
-			var results = cache["results"] as! [String: AnyObject]
-			results.removeValueForKey(dom.objectId)
-			LocalPersistence.classCache[className]?.removeData(dom)
-			let json: [String: AnyObject] = [
-				"time": NSDate.timeIntervalSinceReferenceDate(),
-				"results": results,
-				"class": className]
-			writeCache(json)
-		}
-	}
-
-	func persistent(maxAge: NSTimeInterval, done: ([Data] -> Void)?) {
-		if let cache = loadCache() {
-			if let time = cache["time"] as? Double {
-				let cachedTime = NSDate(timeIntervalSinceReferenceDate: time)
-				if cachedTime.timeIntervalSinceNow > -maxAge {
-					if let cache = cache["results"] as? [String: [String: AnyObject]] {
-						let allData = cache.map { Data($1) }
-						if allData.count > 0 {
-							LocalPersistence.classCache[className] = ClassCache(inner: allData)
-							print("use local data \(className) count=\(allData.count)")
-							done?(allData)
-							return
-						}
-					}
-				}
-			}
-		}
+		var collection: [Self] = []
 		let group = dispatch_group_create()
-		var cache: [String: AnyObject] = [:]
-		var jsons: [Data] = []
-		print("start caching all \(className)")
 
-		_Query(className: className).each(group) { object in
-			cache[object["objectId"] as! String] = object
-			jsons.append(Data(object))
+		query().local(0).each(group) { json in
+			collection.append(Self(json: Data(json), cache: true))
 		}
 
 		dispatch_group_notify(group, dispatch_get_main_queue()) {
-			LocalPersistence.classCache[self.className] = ClassCache(inner: jsons)
-			print("\(self.className) ready count=\(cache.count)")
-			let json: [String: AnyObject] = [
-				"time": NSDate.timeIntervalSinceReferenceDate(),
-				"results": cache,
-				"class": self.className]
-			self.writeCache(json)
-			done?(jsons)
+			do {
+				try enlist(collection, replace: true)
+			} catch {
+				print("failed to save keys list")
+			}
+			closure(collection)
 		}
+	}
+
+	private static func load(objectId: String) -> Self? {
+		if let json = loadJSON(objectId, expireAfter: expireAfter) as? [String: AnyObject] {
+			return Self(json: Data(json), cache: false)
+		}
+		return nil
+	}
+
+	public static func get(objectId: String, callback: (Self) -> ()) {
+		ObjectCache.get(objectId, callback: callback)
+	}
+
+	public func persist(enlist enlist: Bool) {
+		do {
+			try Self.saveJSON(json.raw, toPath: objectId)
+			if enlist {
+				try Self.enlist([self])
+			}
+		} catch {
+			print("failed to save \(Self.className):\(objectId)")
+		}
+	}
+
+	static func enlist(objects: [Self], replace: Bool = false) throws {
+		var keys: [String]
+		if replace {
+			keys = []
+		} else {
+			keys = self.keys() ?? []
+		}
+		for object in objects {
+			let objectId = object.objectId
+			if !keys.contains(objectId) {
+				keys.append(objectId)
+			}
+		}
+		try saveJSON(keys, toPath: ".list")
+		print("saved \(keys.count) to \(className)/.list")
+	}
+
+	private static func keys() -> [String]? {
+		return loadJSON(".list", expireAfter: expireAfter) as? [String]
+	}
+
+	public static func generate() -> CachedObjectsGenerator<Self>? {
+		if let list = keys() {
+			return CachedObjectsGenerator(list: list)
+		}
+		return nil
 	}
 }
 
@@ -255,54 +226,63 @@ extension Constraints: LocalMatch {
 }
 
 extension _Query {
-	func searchLocal(closure: ([String: AnyObject]?, ErrorType?) -> Void) -> Bool {
-		if !useLocal || !constraints.allowsLocalSearch() {
-			return false
+	private func _searchLocal(cache: [Data]) -> [String: AnyObject] {
+		self.constraints.replaceSubQueries { (key, constraints) in
+			let filtered = cache.filter { constraints.match($0) }
+			return filtered.map { $0.value(key) }
 		}
-		if let cache = LocalPersistence.classCache[constraints.className]?.inner {
-			dispatch_barrier_async(LocalPersistence.local_search_queue) {
-				self.constraints.replaceSubQueries { (key, constraints) in
-					if let innerCache = LocalPersistence.classCache[constraints.className]?.inner {
-						let filtered = innerCache.filter { constraints.match($0) }
-						return filtered.map { $0.value(key) }
-					} else {
-						return []
-					}
-				}
-				var results: [Data] = []
-				var count = 0
-				for object in cache {
-					if self.constraints.match(object) {
-						count++
-						if !self.fetchesCount {
-							results.append(object)
-							//TOOD selected Keys?
-						}
-					}
-				}
-				results.sort(self.order)
-
-				var limit = 100
-				if let _limit = self.limit {
-					limit = _limit
-				}
-				if results.count > limit {
-					results = Array(results[0..<limit])
-				}
-
-				dispatch_async(dispatch_get_main_queue()) {
-					var result: [String: AnyObject] = [:]
-					if self.fetchesCount {
-						result["count"] = count
-					} else {
-						result["results"] = results.map { $0.raw }
-					}
-					closure(result, nil)
+		var results: [Data] = []
+		var count = 0
+		for object in cache {
+			if self.constraints.match(object) {
+				count++
+				if !self.fetchesCount {
+					results.append(object)
+					//TOOD selected Keys?
 				}
 			}
-			return true
 		}
-		return false
+		results.sort(self.order)
+
+		var limit = 100
+		if let _limit = self.limit {
+			limit = _limit
+		}
+		if results.count > limit {
+			results = Array(results[0..<limit])
+		}
+
+		var result: [String: AnyObject] = [:]
+		if self.fetchesCount {
+			result["count"] = count
+		} else {
+			result["results"] = results.map { $0.raw }
+		}
+		return result
+	}
+
+	func searchLocal(closure: ([String: AnyObject]?, ErrorType?) -> Void) -> Bool {
+		if trusteCache == 0 {
+			return false
+		}
+
+		if let cache = _loadJSON(constraints.className, key: ".list", expireAfter: trusteCache) as? [String] {
+			do {
+				let data: [Data] = try cache.map { objectId in
+					if let object = _loadJSON(constraints.className, key: objectId, expireAfter: trusteCache) as? [String: AnyObject] {
+						return Data(object)
+					} else {
+						throw ParseError.CacheStructureFailure
+					}
+				}
+				closure(_searchLocal(data), nil)
+				return true
+			} catch {
+				return false
+			}
+		} else {
+			return false
+		}
 	}
 }
 
@@ -339,9 +319,9 @@ private struct ObjectCache {
 		}
 	}
 
-	static func get<T: ParseObject>(objectId: String, rush: Double = 0.25, callback: (T) -> Void) {
-		if let object = LocalPersistence.data(Pointer(className: T.className, objectId: objectId)) {
-			return callback(T(json: object))
+	static func get<T: ParseObject where T: Cache>(objectId: String, rush: Double = 0.25, callback: (T) -> Void) {
+		if let object = T.load(objectId) {
+			return callback(object)
 		} else {
 			let t = timer(T.className)
 			appendCallback(objectId, callback: callback)
@@ -351,13 +331,17 @@ private struct ObjectCache {
 				let objectIds = pending.map { ParseValue($0.objectId) }
 				_Query(className: T.className, constraints: .In("objectId", objectIds)).data { (jsons, error) in
 					for (objectId, callback) in pending {
-						for json in jsons {
-							if json.objectId == objectId {
-								LocalPersistence.appendData(json, pointer: Pointer(className: T.className, objectId: objectId))
-								callback(json)
-								break
-							}
+						for json in jsons where json.objectId == objectId {
+							callback(json)
+							break
 						}
+					}
+					let objects = jsons.map { T(json: $0) }
+					objects.forEach { $0.persist(enlist: false) }
+					do {
+						try T.enlist(objects)
+					} catch {
+						print("failed to enlist objects")
 					}
 				}
 			}
@@ -419,7 +403,7 @@ public struct RelationsCache {
 			let group = dispatch_group_create()
 			relations[mykey] = (group, relation)
 			dispatch_group_enter(group)
-			Query<T>().local(false).whereKey(key, equalTo: to).data { (data, error) in
+			Query<T>().local(0).whereKey(key, equalTo: to).data { (data, error) in
 				relation.cache = data.map { Pointer(className: T.className, data: $0) }
 				print("caching relationship \(mykey): \(relation.cache)")
 				dispatch_group_leave(group)
@@ -450,15 +434,5 @@ public struct RelationsCache {
 				closure(relation)
 			}
 		}
-	}
-}
-
-extension ParseObject {
-	public static func persistent(maxAge: NSTimeInterval, done: ([Data] -> Void)? = nil) {
-		LocalCache(className: className).persistent(maxAge, done: done)
-	}
-
-	public static func get(objectId: String, callback: (Self) -> ()) {
-		ObjectCache.get(objectId, callback: callback)
 	}
 }

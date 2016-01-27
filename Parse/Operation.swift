@@ -94,13 +94,13 @@ extension _Operations {
 		return operation(.SetValue(key, AnyWrapper(value)))
 	}
 
-	public func set(key: String, value: ComparableKeyType) -> Self {
+	public func set(key: String, value: ParseValueLiteralConvertible) -> Self {
 		if let date = value as? NSDate {
 			return set(key, value: Date(date: date))
 		}
 		return set(key, value: ParseValue(value))
 	}
-
+	
 	public func set<U: ParseObject>(key: String, value: U) -> Self {
 		return operation(_Operations.convertToOperation(key, value: value))
 	}

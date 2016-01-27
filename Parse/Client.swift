@@ -11,6 +11,7 @@ typealias Method = Alamofire.Method
 
 public enum ParseError: ErrorType {
 	case SessionFailure
+	case CacheStructureFailure
 	case UncategorizedError(code: Int, message: String)
 }
 
@@ -132,6 +133,7 @@ public enum Parse: URLRequestConvertible {
 
 	public func response(injector: Response -> Bool, closure: Response) {
 		if injector(closure) { return }
+		print("request: \(self)")
 		request(self).response(closure)
 	}
 

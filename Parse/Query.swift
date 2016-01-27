@@ -41,7 +41,7 @@ public class _Query {
 	var includeRelations: String?
 	var skip: Int?
 	var fetchesCount = false
-	var useLocal = false
+	var trusteCache: NSTimeInterval = 0
 
 	init(className: String, constraints: Constraint...) {
 		self.constraints = Constraints(className: className)
@@ -61,7 +61,7 @@ public class _Query {
 		}
 	}
 
-	public func whereKey(key: String, equalTo object: ComparableKeyType) -> Self {
+	public func whereKey(key: String, equalTo object: ParseValueLiteralConvertible) -> Self {
 		if let date = object as? NSDate {
 			return constraint(.EqualTo(key, Date(date: date)))
 		}
@@ -80,7 +80,7 @@ public class _Query {
 		return constraint(.GreaterThan(key, object))
 	}
 
-	public func whereKey(key: String, greaterThan object: ComparableKeyType) -> Self {
+	public func whereKey(key: String, greaterThan object: ParseValueLiteralConvertible) -> Self {
 		if let date = object as? NSDate {
 			return constraint(.GreaterThan(key, Date(date: date)))
 		}
@@ -91,7 +91,7 @@ public class _Query {
 		return constraint(.LessThan(key, object))
 	}
 
-	public func whereKey(key: String, lessThan object: ComparableKeyType) -> Self {
+	public func whereKey(key: String, lessThan object: ParseValueLiteralConvertible) -> Self {
 		if let date = object as? NSDate {
 			return constraint(.LessThan(key, Date(date: date)))
 		}
@@ -174,8 +174,8 @@ public class _Query {
 		return self
 	}
 
-	public func local(local: Bool) -> Self {
-		useLocal = local
+	public func local(duration: NSTimeInterval) -> Self {
+		trusteCache = duration
 		return self
 	}
 }
@@ -183,7 +183,9 @@ public class _Query {
 public class Query<T: ParseObject>: _Query {
 	public init(constraints: Constraint...) {
 		super.init(className: T.className)
-		useLocal = true
+		if let target = T.self as? Cache.Type {
+			trusteCache = target.expireAfter
+		}
 		self.constraints.inner.appendContentsOf(constraints)
 	}
 }
