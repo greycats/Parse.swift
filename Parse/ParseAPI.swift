@@ -313,7 +313,7 @@ extension Operations {
 				if let json = json {
 					data["updatedAt"] = json["updatedAt"]
 					let object = T(json: Data(data))
-					if let object = object as? Cache {
+					if let object = object as? Cacheable {
 						object.persist(enlist: false)
 					}
 					self.updateRelations()
@@ -326,7 +326,7 @@ extension Operations {
 			return save(T.className) { (json, error) in
 				if let json = json {
 					let object = T(json: Data(json))
-					if let object = object as? Cache {
+					if let object = object as? Cacheable {
 						object.persist(enlist: true)
 					}
 					closure(object, nil)

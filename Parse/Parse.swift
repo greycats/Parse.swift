@@ -548,37 +548,6 @@ func <(lhs: ParseType, rhs: ParseType) -> Bool {
 	return false
 }
 
-extension MutableCollectionType where Generator.Element == Data, Index == Int {
-	mutating func sort(keys: String?) {
-		guard let keys = keys else { return }
-		let orders = keys.componentsSeparatedByString(",")
-		var comparators: [(String, Bool)] = []
-		for key in orders {
-			let desc = key.hasPrefix("-")
-			if desc {
-				let key = key.substringFromIndex(key.startIndex.successor())
-				comparators.append((key, false))
-			} else {
-				comparators.append((key, true))
-			}
-		}
-		sortInPlace {
-			for (key, asc) in comparators {
-				if $1[key] == $0[key] {
-					continue
-				}
-				//xnor
-				if $0[key] < $1[key] {
-					return asc
-				} else {
-					return !asc
-				}
-			}
-			return true
-		}
-	}
-}
-
 //MARK: - Printable & Convertible
 
 extension ParseValue: IntegerLiteralConvertible {
@@ -607,6 +576,12 @@ extension ParseValue: FloatLiteralConvertible {
 	public init(floatLiteral value: FloatLiteralType) {
 		object = value
 		type = .Number
+	}
+}
+
+extension ParseValue: CustomStringConvertible {
+	public var description: String {
+		return "ParseValue(object: \(json))"
 	}
 }
 

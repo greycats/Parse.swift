@@ -172,7 +172,7 @@ public class _Query {
 public class Query<T: ParseObject>: _Query {
 	public init(constraints: Constraint...) {
 		super.init(className: T.className)
-		if let target = T.self as? Cache.Type {
+		if let target = T.self as? Cacheable.Type {
 			trusteCache = target.expireAfter
 		}
 		self.constraints.appendContentsOf(constraints)

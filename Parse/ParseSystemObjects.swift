@@ -63,24 +63,27 @@ extension User {
 	}
 
 	private static func load() -> User? {
-		var userDefaults: NSUserDefaults
-		#if TARGET_IS_EXTENSION
-			userDefaults = NSUserDefaults(suiteName: APPGROUP_USER)!
-		#else
-			userDefaults = NSUserDefaults.standardUserDefaults()
-		#endif
-		if let object = userDefaults.objectForKey("user") as? [String: AnyObject] {
-			return User(json: Data(object))
+		if let defaults = NSUserDefaults(suiteName: "parse"), object = defaults.objectForKey("user") as? [String: AnyObject] {
+			var data = Data(object)
+			if let Cacheable = User.self as? Cacheable.Type {
+				let cache = IndividualDataCache(expireAfter: Cacheable.expireAfter, className: User.className)
+				if let cachedData = try? cache.get(data.objectId) {
+					print("return cached user instead of which in user defaults")
+					data = cachedData
+				}
+			}
+			let user = User(json: data)
+			return user
 		}
 		return nil
 	}
 
-	private func persist(callback: (User?, ErrorType?) -> ()) {
+	private func persist(@noescape callback: (User?, ErrorType?) -> ()) {
 		if let token = json.value("sessionToken").string {
-			NSUserDefaults.standardUserDefaults().setObject(json.raw, forKey: "user")
-			NSUserDefaults.standardUserDefaults().synchronize()
-			//					let defaults = NSUserDefaults(suiteName: APPGROUP_USER)
-			//					defaults?.setObject(json, forKey: "user")
+			if let defaults = NSUserDefaults(suiteName: "parse") {
+				defaults.setObject(json.raw, forKey: "user")
+				defaults.synchronize()
+			}
 			Parse.updateSession(token)
 			print("logIn user \(json)")
 			callback(self, nil)
@@ -101,10 +104,10 @@ extension User {
 	}
 
 	public static func logOut() {
-		//		let defaults = NSUserDefaults(suiteName: APPGROUP_USER)
-		//		defaults?.removeObjectForKey("user")
-		NSUserDefaults.standardUserDefaults().removeObjectForKey("user")
-		NSUserDefaults.standardUserDefaults().synchronize()
+		if let defaults = NSUserDefaults(suiteName: "parse") {
+			defaults.removeObjectForKey("user")
+			defaults.synchronize()
+		}
 		Parse.updateSession(nil)
 		Parse.Post("logout", nil).response { _ in }
 	}
