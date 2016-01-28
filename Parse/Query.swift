@@ -11,30 +11,19 @@ public enum Constraint {
 	case LessThan(String, ParseType)
 	case EqualTo(String, ParseType)
 	case Exists(String, Bool)
-	case MatchQuery(key: String, matchKey: String, inQuery: Constraints)
-	case DoNotMatchQuery(key: String, dontMatchKey: String, inQuery: Constraints)
+	case MatchQuery(key: String, matchKey: String, inQuery: _Query)
+	case DoNotMatchQuery(key: String, dontMatchKey: String, inQuery: _Query)
 	case MatchRegex(String, NSRegularExpression)
-	case Or(Constraints, Constraints)
+	case Or(_Query, _Query)
 	case In(String, [ParseValue])
 	case NotIn(String, [ParseValue])
 	case RelatedTo(String, Pointer)
 }
 
-public struct Constraints {
-	var inner: [Constraint] = []
+public class _Query {
+	var constraints: [Constraint] = []
 	let className: String
 
-	init(className: String) {
-		self.className = className
-	}
-
-	mutating func append(constraint: Constraint) {
-		inner.append(constraint)
-	}
-}
-
-public class _Query {
-	var constraints: Constraints
 	var order: String?
 	var limit: Int?
 	var includeKeys: String?
@@ -44,8 +33,8 @@ public class _Query {
 	var trusteCache: NSTimeInterval = 0
 
 	init(className: String, constraints: Constraint...) {
-		self.constraints = Constraints(className: className)
-		self.constraints.inner.appendContentsOf(constraints)
+		self.className = className
+		self.constraints.appendContentsOf(constraints)
 	}
 
 	public func constraint(constraint: Constraint) -> Self {
@@ -122,11 +111,11 @@ public class _Query {
 	}
 
 	public func whereKey<U: ParseObject>(key: String, matchKey: String, inQuery: Query<U>) -> Self {
-		return constraint(.MatchQuery(key: key, matchKey: matchKey, inQuery: inQuery.constraints))
+		return constraint(.MatchQuery(key: key, matchKey: matchKey, inQuery: inQuery))
 	}
 
 	public func whereKey<U: ParseObject>(key: String, dontMatchKey: String, inQuery: Query<U>) -> Self {
-		return constraint(.DoNotMatchQuery(key: key, dontMatchKey: dontMatchKey, inQuery: inQuery.constraints))
+		return constraint(.DoNotMatchQuery(key: key, dontMatchKey: dontMatchKey, inQuery: inQuery))
 	}
 
 	public func whereKey(key: String, match: NSRegularExpression) -> Self {
@@ -186,7 +175,7 @@ public class Query<T: ParseObject>: _Query {
 		if let target = T.self as? Cache.Type {
 			trusteCache = target.expireAfter
 		}
-		self.constraints.inner.appendContentsOf(constraints)
+		self.constraints.appendContentsOf(constraints)
 	}
 }
 
@@ -201,5 +190,5 @@ extension ParseObject {
 }
 
 public func ||<T>(left: Query<T>, right: Query<T>) -> Query<T> {
-	return Query<T>(constraints: .Or(left.constraints, right.constraints))
+	return Query<T>(constraints: .Or(left, right))
 }

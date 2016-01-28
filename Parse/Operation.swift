@@ -21,7 +21,6 @@ public enum Operation {
 
 public class _Operations {
 	var operations: [Operation]
-
 	init(operations: [Operation]) {
 		self.operations = operations
 	}

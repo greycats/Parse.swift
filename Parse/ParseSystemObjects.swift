@@ -166,19 +166,6 @@ extension File {
 	}
 }
 
-extension RelationsCache {
-	public static func of<T: ParseObject>(type: T.Type, key: String, closure: (ManyToMany) -> Void) {
-		if let user = User.currentUser {
-			of(type, key: key, to: user, closure: closure)
-		}
-	}
-	public static func of<U: ParseObject>(key: String, toType: U.Type, closure: (ManyToMany) -> Void) {
-		if let user = User.currentUser {
-			of(Pointer(object: user), key: key, toClass: U.className, closure: closure)
-		}
-	}
-}
-
 extension Operations {
 	public func setSecurity(readwrite: User) -> Self {
 		return operation(.SetSecurity(readwrite.objectId))

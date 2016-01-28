@@ -51,17 +51,11 @@ extension Constraint: QueryComposer {
 	}
 }
 
-extension Constraints: QueryComposer {
-	func composeQuery(inout param: [String : AnyObject]) {
-		for constraint in inner {
-			constraint.composeQuery(&param)
-		}
-	}
-}
-
 extension _Query: QueryComposer {
 	func composeQuery(inout param: [String : AnyObject]) {
-		constraints.composeQuery(&param)
+		for constraint in constraints {
+			constraint.composeQuery(&param)
+		}
 	}
 }
 
@@ -95,7 +89,7 @@ extension _Query {
 		if fetchesCount {
 			parameters["count"] = 1
 		}
-		let _path = path(constraints.className)
+		let _path = path(className)
 		return Parse.Get(_path, parameters)
 	}
 
@@ -203,12 +197,6 @@ extension Constraint: CustomStringConvertible {
 	}
 }
 
-extension Constraints: CustomStringConvertible {
-	public var description: String {
-		return "\(inner)"
-	}
-}
-
 //MARK: Operation
 
 extension Operation: QueryComposer {
@@ -238,6 +226,12 @@ extension Operation: QueryComposer {
 		case .DeleteColumn(let key):
 			param[key] = ["__op": "Delete"]
 		}
+	}
+}
+
+extension _Query: CustomStringConvertible {
+	public var description: String {
+		return "<Query<\(className)>: \(constraints)>"
 	}
 }
 

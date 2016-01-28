@@ -179,43 +179,26 @@ extension Constraint: LocalMatch {
 	}
 }
 
-extension Constraints: LocalMatch {
-	private func allowsLocalSearch() -> Bool {
-		for constraint in inner {
+extension _Query: LocalMatch {
+	private func replaceSubQueries() throws {
+		for (index, constraint) in constraints.enumerate() {
 			switch constraint {
-			case .EqualTo(_, let to):
-				if let _ = to as? Pointer {
-					return false
-				}
+			case .MatchQuery(let key, let matchKey, let inQuery):
+				let keys = try inQuery._searchLocal().map { $0.value(matchKey) }
+				constraints[index] = .In(key, keys)
+				print("replaced \(constraint) with \(constraints[index])")
+			case .DoNotMatchQuery(let key, let dontMatchKey, let inQuery):
+				let keys = try inQuery._searchLocal().map { $0.value(dontMatchKey) }
+				constraints[index] = .NotIn(key, keys)
+				print("replaced \(constraint) with \(constraints[index])")
 			default:
 				continue
 			}
-		}
-		return true
-	}
-
-	private mutating func replaceSubQueries(keys: (String, Constraints) -> [ParseValue]) {
-		var replaced = false
-		for (index, constraint) in inner.enumerate() {
-			switch constraint {
-			case .MatchQuery(let key, let matchKey, let constraints):
-				inner[index] = .In(key, keys(matchKey, constraints))
-				replaced = true
-			case .DoNotMatchQuery(let key, let dontMatchKey, let constraints):
-				inner[index] = .NotIn(key, keys(dontMatchKey, constraints))
-				replaced = true
-			default:
-				continue
-			}
-		}
-
-		if replaced {
-			print("replaced subqueries with in/notin queries \(inner)")
 		}
 	}
 
 	func match(json: Data) -> Bool {
-		for constraint in inner {
+		for constraint in constraints {
 			let match = constraint.match(json)
 			if !match {
 				return false
@@ -223,64 +206,56 @@ extension Constraints: LocalMatch {
 		}
 		return true
 	}
-}
-
-extension _Query {
-	private func _searchLocal(cache: [Data]) -> [String: AnyObject] {
-		self.constraints.replaceSubQueries { (key, constraints) in
-			let filtered = cache.filter { constraints.match($0) }
-			return filtered.map { $0.value(key) }
-		}
-		var results: [Data] = []
+	private func _countLocal() throws -> Int {
+		try replaceSubQueries()
+		let cache = try cachedKeys().map { try cachedObject($0) }
 		var count = 0
-		for object in cache {
-			if self.constraints.match(object) {
-				count++
-				if !self.fetchesCount {
-					results.append(object)
-					//TOOD selected Keys?
-				}
-			}
+		for object in cache where match(object) {
+			count++
 		}
-		results.sort(self.order)
+		return count
+	}
 
-		var limit = 100
-		if let _limit = self.limit {
-			limit = _limit
+	private func _searchLocal() throws -> [Data] {
+		try replaceSubQueries()
+		let cache = try cachedKeys().map { try cachedObject($0) }
+		var results = cache.filter(match)
+		results.sort(order)
+		let _limit = limit ?? 100
+		if results.count > _limit {
+			results = Array(results[0..<_limit])
 		}
-		if results.count > limit {
-			results = Array(results[0..<limit])
-		}
+		return results
+	}
 
-		var result: [String: AnyObject] = [:]
-		if self.fetchesCount {
-			result["count"] = count
-		} else {
-			result["results"] = results.map { $0.raw }
+	private func cachedObject(objectId: String) throws -> Data {
+		guard let object = _loadJSON(className, key: objectId, expireAfter: trusteCache) as? [String: AnyObject] else {
+			throw ParseError.CacheStructureFailure
 		}
-		return result
+		return Data(object)
+	}
+
+	private func cachedKeys() throws -> [String] {
+		guard let cache = _loadJSON(className, key: ".list", expireAfter: trusteCache) as? [String] else {
+			throw ParseError.CacheStructureFailure
+		}
+		return cache
 	}
 
 	func searchLocal(closure: ([String: AnyObject]?, ErrorType?) -> Void) -> Bool {
 		if trusteCache == 0 {
 			return false
 		}
-
-		if let cache = _loadJSON(constraints.className, key: ".list", expireAfter: trusteCache) as? [String] {
-			do {
-				let data: [Data] = try cache.map { objectId in
-					if let object = _loadJSON(constraints.className, key: objectId, expireAfter: trusteCache) as? [String: AnyObject] {
-						return Data(object)
-					} else {
-						throw ParseError.CacheStructureFailure
-					}
-				}
-				closure(_searchLocal(data), nil)
-				return true
-			} catch {
-				return false
+		do {
+			var result: [String: AnyObject] = [:]
+			if fetchesCount {
+				result["count"] = try _countLocal()
+			} else {
+				result["results"] = try _searchLocal().map { $0.raw }
 			}
-		} else {
+			closure(result, nil)
+			return true
+		} catch {
 			return false
 		}
 	}
