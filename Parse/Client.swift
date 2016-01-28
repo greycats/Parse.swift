@@ -11,7 +11,6 @@ typealias Method = Alamofire.Method
 
 public enum ParseError: ErrorType {
 	case SessionFailure
-	case CacheStructureFailure
 	case UncategorizedError(code: Int, message: String)
 }
 
