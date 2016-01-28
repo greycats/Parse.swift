@@ -14,7 +14,7 @@ public protocol Cacheable {
 }
 
 public enum ParseCacheError: ErrorType {
-	case Expired
+	case Expired(time: NSTimeInterval)
 	case NotFound
 	case WrongFileFormat
 }
@@ -55,8 +55,8 @@ extension ParseObject where Self: Cacheable {
 				closure(objects)
 				print("\(className).list hit cache count: \(objects.count)")
 				return
-			} catch ParseCacheError.Expired {
-				print("\(className).list has expired")
+			} catch ParseCacheError.Expired(let time) {
+				print("\(className).list has expired \(time) secs.")
 			} catch ParseCacheError.NotFound {
 				print("\(className).list not found")
 			} catch ParseCacheError.WrongFileFormat {
@@ -245,33 +245,33 @@ extension _Query: LocalMatch {
 //MARK: Cache
 
 private struct ObjectCache {
-	typealias Timer = (objectId: String, callback: Data -> Void)
-	static var timers: [String: (dispatch_source_t, [Timer])] = [:]
+	typealias Callback = (objectId: String, callback: Data -> Void)
+	static var timers: [String: (dispatch_source_t, [Callback])] = [:]
 
 	static func timer(key: String) -> dispatch_source_t {
 		if let timer = timers[key] {
 			return timer.0
 		}
-		let timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue())
-		dispatch_resume(timer)
-		timers[key] = (timer, [])
-		return timer
+		let source = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue())
+		dispatch_resume(source)
+		timers[key] = (source, [])
+		return source
 	}
 
-	static func retrivePending(key: String) -> [Timer] {
-		if let (timer, pending) = timers[key] {
+	static func retrivePending(key: String) -> [Callback] {
+		if let (source, pending) = timers[key] {
 			let checkouts = pending
-			timers[key] = (timer, [])
+			timers[key] = (source, [])
 			return checkouts
 		}
 		return []
 	}
 
-	static func appendCallback<T: ParseObject>(objectId: String, callback: (T) -> Void) {
-		if let (timer, pending) = timers[T.className] {
+	static func append(key: String, callback: Callback) {
+		if let (source, pending) = timers[key] {
 			var _pending = pending
-			_pending.append((objectId: objectId, callback: { callback(T(json: $0)) }))
-			timers[T.className] = (timer, pending)
+			_pending.append(callback)
+			timers[key] = (source, _pending)
 		}
 	}
 
@@ -281,7 +281,7 @@ private struct ObjectCache {
 		} else {
 			let className = T.Element.className
 			let t = timer(className)
-			appendCallback(objectId, callback: callback)
+			append(className, callback: (objectId: objectId, callback: { callback(T.Element(json: $0)) }))
 			dispatch_source_set_timer(t, dispatch_time(DISPATCH_TIME_NOW, Int64(rush * Double(NSEC_PER_SEC))), DISPATCH_TIME_FOREVER, 0)
 			dispatch_source_set_event_handler(t) {
 				let pending = self.retrivePending(className)
@@ -297,8 +297,10 @@ private struct ObjectCache {
 					do {
 						try objects.forEach { try cache.persist($0, enlist: false) }
 						try cache.enlist(objects, replace: false)
-					} catch {
-						print("failed to enlist objects")
+					} catch ParseCacheError.Expired(let time) {
+						print("failed to enlist: \(className).list has expired \(time) secs.")
+					} catch let error as NSError {
+						print("failed to enlist objects \(error)")
 					}
 				}
 			}

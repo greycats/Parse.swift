@@ -12,8 +12,9 @@ private func _loadJSON(folder: String, key: String, expireAfter: NSTimeInterval)
 	if let filePath = cacheHome?.stringByAppendingString("/\(folder)/\(key)") {
 		if let attr = try? NSFileManager.defaultManager().attributesOfItemAtPath(filePath),
 			lastModified = attr[NSFileModificationDate] as? NSDate {
-				if lastModified.timeIntervalSinceNow < -expireAfter {
-					throw ParseCacheError.Expired
+				let time = lastModified.timeIntervalSinceNow + expireAfter
+				if time < 0 {
+					throw ParseCacheError.Expired(time: time)
 				}
 		}
 		if let data = NSData(contentsOfFile: filePath),
