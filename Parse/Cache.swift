@@ -90,8 +90,8 @@ extension ParseObject where Self: Cacheable {
 	public func persist(enlist enlist: Bool) {
 		do {
 			try CacheMachine().persist(self, enlist: enlist)
-		} catch {
-			print("failed to persist \(Self.className):\(objectId)")
+		} catch let error {
+			print("failed to persist \(error) \(Self.className):\(objectId)")
 		}
 	}
 }
@@ -148,8 +148,6 @@ private func orderExpression(expression: String) -> (lhs: Data, rhs: Data) -> Bo
 	return {
 		for (key, asc) in comparators {
 			let v0 = $0[key], v1 = $1[key]
-
-			print(key, v0, v1)
 			if v0 == v1 {
 				continue
 			}

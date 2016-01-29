@@ -60,7 +60,9 @@ struct IndividualDataCache: Cache {
 
 	private func saveJSON(json: AnyObject, toPath: String) throws {
 		if let folder = cacheHome?.stringByAppendingString("/\(className)") {
-			try NSFileManager.defaultManager().createDirectoryAtPath(folder, withIntermediateDirectories: true, attributes: nil)
+			if !NSFileManager.defaultManager().fileExistsAtPath(folder) {
+				try NSFileManager.defaultManager().createDirectoryAtPath(folder, withIntermediateDirectories: true, attributes: nil)
+			}
 			let filePath = "\(folder)/\(toPath)"
 			let data = try NSJSONSerialization.dataWithJSONObject(json, options: [])
 			data.writeToFile(filePath, atomically: false)
