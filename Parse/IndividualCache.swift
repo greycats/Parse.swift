@@ -6,7 +6,13 @@
 //  Copyright © 2016 Rex Sheng. All rights reserved.
 //
 
-private let cacheHome = NSSearchPathForDirectoriesInDomains(.CachesDirectory, .UserDomainMask, true).first
+private let cacheHome: String? = {
+	let home = NSSearchPathForDirectoriesInDomains(.CachesDirectory, .UserDomainMask, true).first
+	if let folder = home?.stringByAppendingString("/\(Parse.applicationId)") {
+		return folder
+	}
+	return nil
+}()
 
 private func _loadJSON(folder: String, key: String, expireAfter: NSTimeInterval) throws -> AnyObject? {
 	if let filePath = cacheHome?.stringByAppendingString("/\(folder)/\(key)") {

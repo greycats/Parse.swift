@@ -66,6 +66,7 @@ public typealias Response = ([String: AnyObject]?, ErrorType?) -> ()
 var clientCreated = false
 public enum Parse: URLRequestConvertible {
 	private static var hostPrefix: String!
+	static var applicationId: String!
 	private static var parseHeaders: [String: String]!
 	private static var token: String?
 
@@ -136,6 +137,7 @@ public enum Parse: URLRequestConvertible {
 
 	public static func setup(applicationId applicationId: String, restKey: String) {
 		hostPrefix = "https://api.parse.com/1/"
+		self.applicationId = applicationId
 		parseHeaders = [
 			"X-Parse-Application-Id": applicationId,
 			"X-Parse-REST-API-Key": restKey]
@@ -144,6 +146,7 @@ public enum Parse: URLRequestConvertible {
 
 	public static func setup(applicationId applicationId: String, masterKey: String) {
 		hostPrefix = "https://api.parse.com/1/"
+		self.applicationId = applicationId
 		parseHeaders = [
 			"X-Parse-Application-Id": applicationId,
 			"X-Parse-Master-Key": masterKey]
