@@ -12,6 +12,52 @@ typealias Method = Alamofire.Method
 public enum ParseError: ErrorType {
 	case SessionFailure
 	case UncategorizedError(code: Int, message: String)
+	case ParseException(code: ParseErrorCode, message: String)
+}
+
+public enum ParseErrorCode: Int {
+	case InternalServerError = 1
+	case ConnectionFailed = 100
+	case ObjectNotFound = 101
+	case InvalidQuery = 102
+	case InvalidClassName = 103
+	case MissingObjectId = 104
+	case InvalidKeyName = 105
+	case InvalidPointer = 106
+	case InvalidJSON = 107
+	case CommandUnavailable = 108
+	case NotInitialized = 109
+	case IncorrectType = 111
+	case InvalidChannelName = 112
+	case PushMisconfigured = 115
+	case ObjectTooLarge = 116
+	case OperationForbidden = 119
+	case InvalidNestedKey = 121
+	case InvalidFileName = 122
+	case InvalidACL = 123
+	case Timeout = 124
+	case InvalidEmailAddress = 125
+	case DuplicateValue = 137
+	case InvalidRoleName = 139
+	case ExceededQuota = 140
+	case ScriptFailed = 141
+	case ValidationFailed = 142
+	case FileDeleteFailed = 153
+	case RequestLimitExceeded = 155
+	case InvalidEventName = 160
+	case UsernameMissing = 200
+	case PasswordMissing = 201
+	case UsernameTaken = 202
+	case EmailTaken = 203
+	case EmailMissing = 204
+	case EmailNotFound = 205
+	case SessionMissing = 206
+	case MustCreateUserThroughSignup = 207
+	case AccountAlreadyLinked = 208
+	case InvalidSessionToken = 209
+	case LinkedIdMissing = 250
+	case InvalidLinkedSession = 251
+	case UnsupportedService = 252
 }
 
 //MARK: - Dispatch
@@ -153,11 +199,15 @@ extension Alamofire.Request {
 	private func response(closure: ([String: AnyObject]?, ErrorType?) -> ()) {
 		responseJSON { response in
 			if let object = response.result.value as? [String: AnyObject] {
-				if object["error"] != nil && object["code"] != nil {
-					closure(nil, ParseError.UncategorizedError(code: object["code"] as! Int, message: object["error"] as! String))
+				guard let code = object["code"] as? Int, message = object["error"] as? String else {
+					closure(object, nil)
 					return
 				}
-				closure(object, response.result.error)
+				if let code = ParseErrorCode(rawValue: code) {
+					closure(nil, ParseError.ParseException(code: code, message: message))
+				} else {
+					closure(nil, ParseError.UncategorizedError(code: code, message: message))
+				}
 			} else {
 				closure(nil, response.result.error)
 			}
