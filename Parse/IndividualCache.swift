@@ -136,6 +136,11 @@ struct IndividualCache<T: ParseObject where T: Cacheable>: Cache {
 	}
 
 	func enlist(objects: [T], replace: Bool = false) throws {
-		try innerCache.enlist(objects.map { $0.objectId }, replace: replace)
+		do {
+			try innerCache.enlist(objects.map { $0.objectId }, replace: replace)
+		} catch ParseCacheError.Expired(let time) {
+			print("failed to enlist: \(T.className).list has expired \(time) secs.")
+			T.list { _ in }
+		}
 	}
 }

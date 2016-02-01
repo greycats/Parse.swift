@@ -260,6 +260,10 @@ extension _Operations: QueryComposer {
 
 	public func update(className: String, objectId: String, closure: ([String: AnyObject]?, ErrorType?) -> Void) -> [String: AnyObject] {
 		let param = _composeQuery(self)
+		if param.count == 0 {
+			closure([:], nil)
+			return param
+		}
 		let _path = path(className, objectId: objectId)
 		print("updating \(param) to \(_path)")
 		Parse.Put(_path, param).response { (json, error) in

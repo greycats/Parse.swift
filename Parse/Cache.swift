@@ -68,7 +68,7 @@ extension ParseObject where Self: Cacheable {
 
 		var collection: [Self] = []
 		let group = dispatch_group_create()
-
+		print("synchronizing \(className)...")
 		query().local(0).each(group) { json in
 			collection.append(Self(json: Data(json), cache: true))
 		}
