@@ -13,6 +13,7 @@ public struct User: ParseObject {
 	public init() {}
 	public let username = Field<String>("username")
 	public let email = Field<String>("email")
+	public let password = Field<String>("password")
 }
 
 public struct Installation: ParseObject {
