@@ -86,7 +86,7 @@ public struct ACL {
 }
 
 public struct Data {
-	let raw: [String: AnyObject]
+	public let raw: [String: AnyObject]
 	public init(_ raw: [String: AnyObject]) {
 		self.raw = raw
 	}

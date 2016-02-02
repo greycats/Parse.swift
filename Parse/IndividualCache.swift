@@ -6,16 +6,23 @@
 //  Copyright © 2016 Rex Sheng. All rights reserved.
 //
 
-private let cacheHome: String? = {
+private func _file(className: String, key: String? = nil) -> String? {
 	let home = NSSearchPathForDirectoriesInDomains(.CachesDirectory, .UserDomainMask, true).first
-	if let folder = home?.stringByAppendingString("/\(Parse.applicationId)") {
-		return folder
+	if let folder = home?.stringByAppendingString("/\(Parse.applicationId)/\(className)") {
+		if !NSFileManager.defaultManager().fileExistsAtPath(folder) {
+			let _ = try? NSFileManager.defaultManager().createDirectoryAtPath(folder, withIntermediateDirectories: true, attributes: nil)
+		}
+		if let key = key {
+			return "\(folder)/\(key)"
+		} else {
+			return folder
+		}
 	}
 	return nil
-}()
+}
 
 private func _loadJSON(folder: String, key: String, expireAfter: NSTimeInterval) throws -> AnyObject? {
-	if let filePath = cacheHome?.stringByAppendingString("/\(folder)/\(key)") {
+	if let filePath = _file(folder, key: key) {
 		if let attr = try? NSFileManager.defaultManager().attributesOfItemAtPath(filePath),
 			lastModified = attr[NSFileModificationDate] as? NSDate {
 				let time = lastModified.timeIntervalSinceNow + expireAfter
@@ -65,11 +72,7 @@ struct IndividualDataCache: Cache {
 	}
 
 	private func saveJSON(json: AnyObject, toPath: String) throws {
-		if let folder = cacheHome?.stringByAppendingString("/\(className)") {
-			if !NSFileManager.defaultManager().fileExistsAtPath(folder) {
-				try NSFileManager.defaultManager().createDirectoryAtPath(folder, withIntermediateDirectories: true, attributes: nil)
-			}
-			let filePath = "\(folder)/\(toPath)"
+		if let filePath = _file(className, key: toPath) {
 			let data = try NSJSONSerialization.dataWithJSONObject(json, options: [])
 			data.writeToFile(filePath, atomically: false)
 		}

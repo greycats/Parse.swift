@@ -72,6 +72,24 @@ extension ParseObject {
 	}
 }
 
+extension Data {
+	public func convertIntoOperation(op: _Operations) {
+		for (key, value) in raw {
+			op.operation(.SetValue(key, AnyWrapper(value)))
+//			switch value {
+//			case let v as [String: String]:
+//				if let pointer = Pointer(v) {
+//					op.set(key, value: Pointer(v))
+//				}
+//			case let v as Date.RawValue:
+//				op.set(key, value: Date(v)!)
+//			default:
+//				break
+//			}
+		}
+	}
+}
+
 extension _Operations {
 	static func convertToOperation<U: ParseObject>(key: String, value: U?) -> Operation {
 		if let value = value {
@@ -99,7 +117,7 @@ extension _Operations {
 		}
 		return set(key, value: ParseValue(value))
 	}
-	
+
 	public func set<U: ParseObject>(key: String, value: U) -> Self {
 		return operation(_Operations.convertToOperation(key, value: value))
 	}
