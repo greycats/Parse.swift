@@ -61,12 +61,16 @@ public struct Bytes {
 public struct Pointer {
 	public let className: String
 	public let objectId: String
-	public let connections: [String: Pointer]?
 
-	public init(className: String, objectId: String, connections: [String: Pointer]? = nil) {
+	public init(className: String, objectId: String) {
 		self.className = className
 		self.objectId = objectId
-		self.connections = connections
+	}
+}
+
+extension Pointer: Hashable {
+	public var hashValue: Int {
+		return objectId.hashValue
 	}
 }
 
@@ -276,34 +280,19 @@ extension Pointer: _ParseType {
 		if json["__type"] == "Pointer" {
 			self.className = json["className"]! as String
 			self.objectId = json["objectId"]! as String
-			self.connections = nil
 			return
 		}
 		return nil
 	}
 
 	public init<T: ParseObject>(object: T) {
-		var connections: [String: Pointer] = [:]
-		for k in object.json.keys {
-			if let p = object.json.pointer(k) {
-				connections[k] = p
-			}
-		}
 		className = T.className
 		objectId = object.json.objectId
-		self.connections = connections
 	}
 
 	public init(className: String, data: Data) {
-		var connections: [String: Pointer] = [:]
-		for k in data.keys {
-			if let p = data.pointer(k) {
-				connections[k] = p
-			}
-		}
 		self.className = className
 		objectId = data.objectId
-		self.connections = connections
 	}
 
 	public var json: AnyObject {
@@ -454,12 +443,6 @@ extension NSDate: ParseValueLiteralConvertible {}
 extension NSNumber: ParseValueLiteralConvertible {}
 extension NSString: ParseValueLiteralConvertible {}
 
-extension Pointer {
-	subscript(key: String) -> Pointer {
-		return connections![key]!
-	}
-}
-
 //MARK: - Comparable
 
 extension ParseValue: Comparable {}
@@ -597,12 +580,6 @@ extension Data: DictionaryLiteralConvertible {
 
 extension Pointer: CustomStringConvertible {
 	public var description: String {
-		var string = "*\(className).\(objectId)"
-		if let conn = connections {
-			string += " ["
-			string += conn.map { "\($0):\($1)" }.joinWithSeparator(", ")
-			string += "]"
-		}
-		return string
+		return "*\(className).\(objectId)"
 	}
 }

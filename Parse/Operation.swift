@@ -73,19 +73,19 @@ extension ParseObject {
 }
 
 extension Data {
-	public func convertIntoOperation(op: _Operations) {
+	public func convertIntoOperation(op: _Operations, convertPointer: (Pointer -> Pointer?)? = nil) {
 		for (key, value) in raw {
-			op.operation(.SetValue(key, AnyWrapper(value)))
-//			switch value {
-//			case let v as [String: String]:
-//				if let pointer = Pointer(v) {
-//					op.set(key, value: Pointer(v))
-//				}
-//			case let v as Date.RawValue:
-//				op.set(key, value: Date(v)!)
-//			default:
-//				break
-//			}
+			switch key {
+			case "objectId", "createdAt", "updatedAt":
+				continue
+			default:
+				if let c = convertPointer, value = value as? Pointer.RawValue,
+					pointer = Pointer(value), converted = c(pointer) {
+					op.operation(.SetValue(key, converted))
+				} else {
+					op.operation(.SetValue(key, AnyWrapper(value)))
+				}
+			}
 		}
 	}
 }

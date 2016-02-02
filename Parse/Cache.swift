@@ -98,12 +98,12 @@ extension ParseObject where Self: Cacheable {
 
 //MARKL Local Search
 
-protocol LocalMatch {
+public protocol LocalMatch {
 	func match(json: Data) -> Bool
 }
 
 extension Constraint: LocalMatch {
-	func match(json: Data) -> Bool {
+	public func match(json: Data) -> Bool {
 		switch self {
 		case .EqualTo(let key, let right):
 			return json[key] == right
@@ -180,7 +180,7 @@ extension _Query: LocalMatch {
 		}
 	}
 
-	func match(json: Data) -> Bool {
+	public func match(json: Data) -> Bool {
 		for constraint in constraints {
 			let match = constraint.match(json)
 			if !match {
@@ -189,6 +189,7 @@ extension _Query: LocalMatch {
 		}
 		return true
 	}
+
 	private func _countLocal() throws -> Int {
 		try replaceSubQueries()
 		let cache = try objectIds().map { try get($0) }
