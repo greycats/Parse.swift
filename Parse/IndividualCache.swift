@@ -83,6 +83,18 @@ struct IndividualDataCache: Cache {
 		return Data(json)
 	}
 
+	func remove(objectId: String) throws {
+		if let filePath = _file(className, key: objectId) {
+			try NSFileManager.defaultManager().removeItemAtPath(filePath)
+			var keys = try objectIds()
+			if let index = keys.indexOf(objectId) {
+				keys.removeAtIndex(index)
+				try saveJSON(keys, toPath: ".list")
+				print("remove \(objectId) from \(className)/.list")
+			}
+		}
+	}
+
 	func persist(object: Data, enlist: Bool) throws {
 		try saveJSON(object.raw, toPath: object.objectId)
 		if enlist {
@@ -138,6 +150,10 @@ struct IndividualCache<T: ParseObject where T: Cacheable>: Cache {
 	func get(objectId: String) throws -> T {
 		let data = try innerCache.get(objectId)
 		return T(json: data, cache: false)
+	}
+
+	func remove(string: String) throws {
+		try innerCache.remove(string)
 	}
 
 	func persist(object: T, enlist: Bool) throws {

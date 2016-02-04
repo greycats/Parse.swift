@@ -11,6 +11,7 @@
 public protocol Cacheable {
 	static var expireAfter: NSTimeInterval { get }
 	func persist(enlist enlist: Bool)
+	static func remove(objectId: String)
 }
 
 public enum ParseCacheError: ErrorType {
@@ -25,6 +26,7 @@ protocol Cache: SequenceType {
 	func get(string: String) throws -> Element
 	func persist(object: Element, enlist: Bool) throws
 	func enlist(objects: [Element], replace: Bool) throws
+	func remove(string: String) throws
 }
 
 extension ParseObject {
@@ -85,6 +87,14 @@ extension ParseObject where Self: Cacheable {
 
 	public static func get(objectId: String, callback: (Self) -> ()) {
 		ObjectCache.get(CacheMachine(), objectId: objectId, callback: callback)
+	}
+
+	public static func remove(objectId: String) {
+		do {
+			try CacheMachine().remove(objectId)
+		} catch let error {
+			print("cant remove \(objectId): \(error)")
+		}
 	}
 
 	public func persist(enlist enlist: Bool) {

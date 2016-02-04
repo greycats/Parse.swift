@@ -299,7 +299,13 @@ extension _Operations: QueryComposer {
 
 extension Operations {
 	public func delete(closure: (ErrorType?) -> Void) {
-		delete(T.className, objectId: object.objectId, closure: closure)
+		let objectId = object.objectId
+		delete(T.className, objectId: objectId) { error in
+			if let t = T.self as? Cacheable.Type where error == nil {
+				t.remove(objectId)
+			}
+			closure(error)
+		}
 	}
 
 	public func save(closure: (T?, ErrorType?) -> Void) -> [String: AnyObject] {
@@ -353,5 +359,9 @@ extension ParseObject {
 			}
 		}
 		return o.save(closure)
+	}
+
+	public func delete(closure: (ErrorType?) -> ()) {
+		operation().delete(closure)
 	}
 }
